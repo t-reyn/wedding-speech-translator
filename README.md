@@ -34,27 +34,102 @@ mic / mixer feed
   it a `targets` list, e.g. `"vi": ["en", "yue"]`.
 - Expected delay: roughly 1.5–2.5 s behind the speaker.
 
-## Setup (MacBook Pro, Apple Silicon)
+## Installation
+
+> This repo is **private**, so cloning requires being signed in to the
+> `t-reyn` GitHub account. The model download (~4 GB) is one-time — do it at
+> home on good wifi, not at the venue.
+
+### macOS (MacBook Pro, Apple Silicon — the wedding machine)
+
+**1. Install the developer basics** (Terminal — gives you `git` and `python3`):
 
 ```bash
-git clone https://github.com/t-reyn/wedding-speech-translator.git
+xcode-select --install
+```
+
+**2. Sign in to GitHub and clone.** Easiest is the GitHub CLI via
+[Homebrew](https://brew.sh) (skip Homebrew if you already have it):
+
+```bash
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+brew install gh
+gh auth login          # choose GitHub.com → HTTPS → log in with browser
+gh repo clone t-reyn/wedding-speech-translator
 cd wedding-speech-translator
+```
+
+*(Alternative: install [GitHub Desktop](https://desktop.github.com), sign in,
+and clone the repo from there — then `cd` into wherever it put the folder.)*
+
+**3. Install the Python dependencies** (in a virtualenv the launchers will
+auto-detect):
+
+```bash
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements-mac.txt
-python setup_models.py        # one-time, ~4 GB of downloads — do this at home!
 ```
 
-Then just **double-click `Start Captions.command`** in Finder to run it (or
-`Start Captions (Demo).command` to preview the display with no mic/models). The
-first time, macOS may ask you to confirm running it, and you may need to grant
-Terminal microphone access in System Settings → Privacy & Security → Microphone.
+**4. Download the models** (one-time, ~4 GB; resumes automatically if the
+connection stalls):
 
-On Windows (dev machine), use `requirements-windows.txt` instead — it swaps
-mlx-whisper for faster-whisper — and double-click `Start Captions.bat`. An NVIDIA
-GPU is used automatically if `nvidia-cublas-cu12` + `nvidia-cudnn-cu12` are
-installed; otherwise it runs on CPU. (The Mac uses the Apple GPU via MLX with no
-extra setup.)
+```bash
+python setup_models.py
+```
+
+**5. Run it:** double-click **`Start Captions.command`** in Finder
+(or `Start Captions (Demo).command` to preview the display without mic/models).
+
+First-run macOS prompts, both expected:
+- Gatekeeper may block the double-click — **right-click the file → Open → Open**
+  (only needed once).
+- Grant **microphone access to Terminal** when asked (or in System Settings →
+  Privacy & Security → Microphone).
+
+The Mac uses the Apple GPU automatically via MLX — no extra setup.
+
+### Windows
+
+**1. Install Python 3.12 and the GitHub CLI** (PowerShell):
+
+```powershell
+winget install Python.Python.3.12
+winget install Git.Git
+winget install GitHub.cli
+```
+
+**2. Sign in and clone** (new PowerShell window so PATH refreshes):
+
+```powershell
+gh auth login          # choose GitHub.com → HTTPS → log in with browser
+gh repo clone t-reyn/wedding-speech-translator
+cd wedding-speech-translator
+```
+
+**3. Install dependencies and download models:**
+
+```powershell
+python -m pip install -r requirements-windows.txt
+python setup_models.py
+```
+
+**4. Run it:** double-click **`Start Captions.bat`**
+(or `Start Captions (Demo).bat` for the scripted demo).
+
+Optional — NVIDIA GPU acceleration (3-4× faster captions). If the machine has
+an NVIDIA card:
+
+```powershell
+python -m pip install nvidia-cublas-cu12 nvidia-cudnn-cu12
+```
+
+The server picks up the GPU automatically next launch (look for
+`Whisper: using CUDA (GPU).` in `captions_log.txt`); without it everything
+still works on CPU, just slower.
+
+> The launchers log to `captions_log.txt` next to the scripts and auto-restart
+> the server if it ever exits, so captions come back by themselves mid-event.
 
 ## Running
 
