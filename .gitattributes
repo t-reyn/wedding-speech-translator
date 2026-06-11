@@ -1,0 +1,12 @@
+* text=auto
+
+# Shell scripts must stay LF or they won't run on macOS
+*.command text eol=lf
+*.sh text eol=lf
+
+# Windows batch files keep CRLF
+*.bat text eol=crlf
+
+# Binary assets
+*.ttf binary
+*.wav binary

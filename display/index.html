@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:,">
+<title>Speech Captions</title>
+<style>
+  /* Self-hosted so the projector page works offline (no Google Fonts CDN). */
+  @font-face{font-family:'Archivo';font-style:normal;font-weight:400;font-display:swap;
+    src:url('/fonts/archivo-400.ttf') format('truetype');}
+  @font-face{font-family:'Archivo';font-style:normal;font-weight:500;font-display:swap;
+    src:url('/fonts/archivo-500.ttf') format('truetype');}
+  @font-face{font-family:'Archivo';font-style:normal;font-weight:600;font-display:swap;
+    src:url('/fonts/archivo-600.ttf') format('truetype');}
+  @font-face{font-family:'IBM Plex Mono';font-style:normal;font-weight:400;font-display:swap;
+    src:url('/fonts/plexmono-400.ttf') format('truetype');}
+  @font-face{font-family:'IBM Plex Mono';font-style:normal;font-weight:500;font-display:swap;
+    src:url('/fonts/plexmono-500.ttf') format('truetype');}
+  @font-face{font-family:'IBM Plex Mono';font-style:italic;font-weight:400;font-display:swap;
+    src:url('/fonts/plexmono-400i.ttf') format('truetype');}
+
+  :root{
+    --bg:#0e110f; --ink:#eef3ee; --ink-dim:#aeb6ad; --source:#6a746c;
+    --green:#8ed6ab; --gold:#e3c489; --cream:#f4f5ef; --en:#cdd5cd;
+    --cjk:'Noto Sans HK','PingFang HK','Microsoft JhengHei','Noto Sans TC',sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  html,body{height:100%;background:var(--bg);overflow:hidden;cursor:none;}
+  body{font-family:'Archivo',system-ui,sans-serif;color:var(--ink);
+    -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;}
+
+  .beacon{position:relative;width:100%;height:100vh;
+    padding:clamp(40px,4.5vw,92px) clamp(44px,5vw,104px);}
+
+  .topbar{position:absolute;top:clamp(26px,3vw,52px);left:clamp(44px,5vw,104px);
+    right:clamp(44px,5vw,104px);display:flex;align-items:center;gap:15px;}
+  .topbar .lbl{font-family:'IBM Plex Mono',monospace;font-size:clamp(12px,1vw,16px);
+    letter-spacing:.22em;text-transform:uppercase;color:var(--source);font-weight:500;white-space:nowrap;}
+  .topbar .partial{font-family:'IBM Plex Mono',monospace;color:var(--source);
+    font-size:clamp(12px,1vw,15px);font-style:italic;opacity:.85;margin-left:auto;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+
+  .wave{display:flex;align-items:flex-end;gap:3px;height:clamp(14px,1.4vw,20px);}
+  .bar{width:3px;height:100%;background:var(--green);border-radius:2px;transform-origin:bottom;
+    animation:bar 1s ease-in-out infinite;}
+  @keyframes bar{0%,100%{transform:scaleY(.28);}50%{transform:scaleY(1);}}
+  body.offline .bar{animation:none;transform:scaleY(.28);background:var(--source);}
+
+  .stack{display:flex;flex-direction:column;justify-content:center;height:100%;}
+  .block + .block{margin-top:clamp(22px,2.6vw,40px);}
+  .lblrow{display:flex;align-items:center;gap:12px;margin-bottom:clamp(8px,1vw,14px);}
+  .chip{width:clamp(10px,1vw,14px);height:clamp(10px,1vw,14px);border-radius:3px;flex:0 0 auto;}
+  .lname{font-family:'IBM Plex Mono',monospace;font-size:clamp(12px,1vw,15px);
+    letter-spacing:.28em;text-transform:uppercase;font-weight:500;white-space:nowrap;}
+  .rule{flex:1;height:1px;}
+  .txt{line-height:1.06;text-wrap:balance;}
+  .primary .txt{font-size:clamp(44px,5.6vw,104px);font-weight:600;letter-spacing:-.012em;color:var(--cream);}
+  .secondary .txt{font-size:clamp(24px,2.9vw,54px);font-weight:400;line-height:1.18;}
+  .cjk{font-family:var(--cjk);font-weight:500;}
+  .primary .cjk{font-weight:600;}
+
+  .txt-line{opacity:1;transform:none;animation:reveal .58s cubic-bezier(.2,.7,.2,1);}
+  @keyframes reveal{from{opacity:0;transform:translateY(16px);}to{opacity:1;transform:none;}}
+
+  .idle{color:var(--source);font-family:'IBM Plex Mono',monospace;font-size:clamp(13px,1.1vw,17px);
+    letter-spacing:.1em;}
+
+  @media (prefers-reduced-motion:reduce){
+    .txt-line{animation:none;} .bar{animation:none;}
+  }
+</style>
+</head>
+<body>
+  <div class="beacon">
+    <div class="topbar">
+      <div class="wave" aria-hidden="true">
+        <span class="bar" style="animation-delay:0s"></span>
+        <span class="bar" style="animation-delay:.13s"></span>
+        <span class="bar" style="animation-delay:.26s"></span>
+        <span class="bar" style="animation-delay:.39s"></span>
+        <span class="bar" style="animation-delay:.52s"></span>
+      </div>
+      <span class="lbl" id="lbl">Listening</span>
+      <span class="partial" id="partial"></span>
+    </div>
+    <div class="stack" id="stack">
+      <div class="idle" id="idle">Waiting for the first words…</div>
+    </div>
+  </div>
+
+<script>
+  const $ = id => document.getElementById(id);
+  const LANGS = {
+    en:  { name:'English',    color:'var(--en)'    },
+    yue: { name:'Cantonese',  color:'var(--green)' },
+    vi:  { name:'Vietnamese', color:'var(--gold)'  },
+  };
+  const ORDER = ['en','yue','vi'];
+  const nfc = s => (typeof s === 'string' ? s.normalize('NFC') : s);
+  const orderFor = spoken => [spoken, ...ORDER.filter(k => k !== spoken)];
+
+  let spoken = 'en';
+  let uttId = 0;
+
+  function setTopbar() {
+    $('lbl').textContent = 'Listening · ' + LANGS[spoken].name;
+  }
+
+  function renderPartial(msg) {
+    if (msg.lang in LANGS) spoken = msg.lang;
+    setTopbar();
+    $('partial').textContent = nfc(msg.original) || '';
+  }
+
+  function renderFinal(msg) {
+    if (msg.lang in LANGS) spoken = msg.lang;
+    setTopbar();
+    $('partial').textContent = '';
+
+    const utt = { [msg.lang]: msg.original };
+    for (const t of msg.translations || []) utt[t.lang] = t.text;
+
+    uttId++;
+    const stack = $('stack');
+    stack.innerHTML = '';
+    orderFor(spoken).forEach((k, i) => {
+      if (!(k in utt)) return;
+      const L = LANGS[k];
+      const prim = i === 0;
+
+      const block = document.createElement('div');
+      block.className = 'block ' + (prim ? 'primary' : 'secondary');
+
+      const row = document.createElement('div');
+      row.className = 'lblrow';
+      const chip = document.createElement('span');
+      chip.className = 'chip'; chip.style.background = L.color;
+      const name = document.createElement('span');
+      name.className = 'lname'; name.style.color = L.color; name.textContent = L.name;
+      const rule = document.createElement('span');
+      rule.className = 'rule'; rule.style.background = L.color; rule.style.opacity = .28;
+      row.append(chip, name, rule);
+
+      const line = document.createElement('div');
+      line.className = 'txt txt-line' + (k === 'yue' ? ' cjk' : '');
+      // Primary line is cream for legibility, except Cantonese keeps its green
+      // accent even when it's the spoken/primary language (per request).
+      line.style.color = (prim && k !== 'yue') ? 'var(--cream)' : L.color;
+      line.style.animationDelay = (i * 0.09) + 's';
+      line.textContent = nfc(utt[k]);
+
+      block.append(row, line);
+      stack.append(block);
+    });
+  }
+
+  let retryMs = 1000;
+  function connect() {
+    const ws = new WebSocket(`ws://${location.host}/ws`);
+    ws.onopen = () => { document.body.classList.remove('offline'); retryMs = 1000; };
+    ws.onmessage = e => {
+      const msg = JSON.parse(e.data);
+      if (msg.type === 'partial') renderPartial(msg);
+      else if (msg.type === 'final') renderFinal(msg);
+    };
+    ws.onclose = () => {
+      document.body.classList.add('offline');
+      setTimeout(connect, retryMs);
+      retryMs = Math.min(retryMs * 2, 5000);
+    };
+    ws.onerror = () => ws.close();
+  }
+  setTopbar();
+  connect();
+
+  document.addEventListener('keydown', e => {
+    const k = e.key.toLowerCase();
+    if (k === 'f') {
+      document.fullscreenElement
+        ? document.exitFullscreen()
+        : document.documentElement.requestFullscreen();
+    } else if (k === 'h') {
+      document.body.style.visibility =
+        document.body.style.visibility === 'hidden' ? 'visible' : 'hidden';
+    }
+  });
+  document.addEventListener('dblclick', () =>
+    document.fullscreenElement || document.documentElement.requestFullscreen());
+</script>
+</body>
+</html>

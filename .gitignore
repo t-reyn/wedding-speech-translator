@@ -1,0 +1,13 @@
+venv/
+.venv/
+__pycache__/
+models/
+*.pyc
+.DS_Store
+Thumbs.db
+
+# Runtime log written by the launchers
+captions_log.txt
+
+# Claude Code tooling config (machine-specific absolute paths)
+.claude/

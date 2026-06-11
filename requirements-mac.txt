@@ -1,0 +1,11 @@
+mlx-whisper
+aiohttp
+sounddevice
+numpy
+silero-vad
+torch
+transformers
+ctranslate2
+sentencepiece
+opencc-python-reimplemented
+huggingface_hub

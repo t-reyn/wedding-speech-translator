@@ -1,0 +1,63 @@
+{
+  "audio": {
+    "device": null,
+    "sample_rate": 16000
+  },
+  "vad": {
+    "threshold": 0.5,
+    "min_silence_ms": 700,
+    "preroll_ms": 300,
+    "max_utterance_s": 15,
+    "partial_interval_s": 2.0
+  },
+  "asr": {
+    "backend": "auto",
+    "device": "auto",
+    "mlx_model": "mlx-community/whisper-large-v3-turbo",
+    "fw_model": "large-v3-turbo",
+    "beam_size_final": 5,
+    "cuda_compute_type": "int8_float16",
+    "initial_prompt": "Wedding speeches and toasts for the bride Ellese Ha and groom Reynold To. Other names: Vinh Ha, Vinh To, Sue La, Amy Ha, Ricky Ha, Brian He, Wilson Ngo, Shafif Aurik, Julian Widjaja, Jeehun Kim, Austin Lei, Leyen Nguyen, Jazz Oey. Venue: Villa Plenilunio. 婚禮致辭。"
+  },
+  "languages": {
+    "detect": ["en", "yue"],
+    "pivot_through_english": true,
+    "nllb_src": {"en": "eng_Latn", "yue": "yue_Hant", "vi": "vie_Latn"},
+    "nllb_tgt": {"en": "eng_Latn", "yue": "zho_Hant", "vi": "vie_Latn"},
+    "targets": {"en": ["yue", "vi"], "yue": ["en", "vi"]}
+  },
+  "mt": {
+    "hf_model": "facebook/nllb-200-distilled-1.3B",
+    "model_dir": "models/nllb-ct2",
+    "device": "auto",
+    "beam_size": 2,
+    "protect_names": [
+      "Ellese Ha", "Reynold To", "Vinh Ha", "Vinh To", "Sue La", "Amy Ha",
+      "Ricky Ha", "Brian He", "Wilson Ngo", "Shafif Aurik", "Julian Widjaja",
+      "Jeehun Kim", "Austin Lei", "Leyen Nguyen", "Jazz Oey", "Villa Plenilunio",
+      "Ellese", "Reynold", "Wilson", "Shafif", "Julian", "Jeehun", "Leyen",
+      "Ricky", "Vinh", "Amy", "Brian", "Austin", "Widjaja", "Nguyen", "Aurik",
+      "Ngo", "Oey"
+    ]
+  },
+  "filter": {
+    "blocklist": [
+      "amara.org",
+      "字幕由",
+      "subtitles by",
+      "thank you for watching",
+      "thanks for watching",
+      "多謝收睇",
+      "多谢收睇",
+      "請訂閱",
+      "点赞",
+      "婚禮致辭",
+      "婚礼致辞",
+      "wedding speeches and toasts"
+    ]
+  },
+  "server": {
+    "host": "0.0.0.0",
+    "port": 8765
+  }
+}
