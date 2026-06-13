@@ -1,6 +1,6 @@
 {
   "audio": {
-    "device": null,
+    "device": 1,
     "sample_rate": 16000
   },
   "vad": {
