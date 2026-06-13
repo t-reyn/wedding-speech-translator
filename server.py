@@ -52,6 +52,10 @@ WHISPER_MODELS = {
     "small":  ("mlx-community/whisper-small-mlx", "small"),
     "medium": ("mlx-community/whisper-medium-mlx", "medium"),
     "turbo":  ("mlx-community/whisper-large-v3-turbo", "large-v3-turbo"),
+    # Cantonese-specialised turbo fine-tune (bilingual EN+yue, code-switch aware).
+    # These point at LOCAL folders produced by convert_cantonese.py — run that
+    # once per machine first, or this option errors with "model not found".
+    "cantonese": ("models/whisper-cantonese-mlx", "models/whisper-cantonese-ct2"),
 }
 
 clients: set[web.WebSocketResponse] = set()
@@ -128,6 +132,12 @@ async def demo_feed():
                 shown = (shown + " " + w).strip() if lang == "en" else shown + w
                 await out_queue.put({"type": "partial", "lang": lang, "original": shown})
                 await asyncio.sleep(0.28)
+            # A provisional partial carrying live (still-forming) translations,
+            # then the crisp final a beat later — mirrors the real pipeline.
+            await out_queue.put({
+                "type": "partial", "lang": lang, "original": original,
+                "translations": [{"lang": t, "text": x} for t, x in translations],
+            })
             await asyncio.sleep(0.9)
             await out_queue.put({
                 "type": "final", "lang": lang, "original": original,
@@ -199,6 +209,33 @@ def start_pipeline(loop, source_file=None):
             job_lock.notify()
 
     utt_langs = {}
+    lang_cfg = CONFIG["languages"]
+
+    def translate_all(lang, original, partial=False):
+        targets = lang_cfg["targets"][lang]
+        # On a throwaway partial, Cantonese skips Vietnamese: VI pivots through
+        # the English translation (a second sequential NLLB call) and the final
+        # will show all three anyway. English partials stay full — both targets
+        # come from one batched call, so dropping VI saves nothing there.
+        if partial and lang != "en":
+            targets = [t for t in targets if t == "en"] or targets[:1]
+        if lang == "en":
+            # Targets are independent of each other, so batch them in one call.
+            tgt_codes = [lang_cfg["nllb_tgt"][t] for t in targets]
+            outs = translator.translate_multi(original, "eng_Latn", tgt_codes)
+            return [{"lang": t, "text": o} for t, o in zip(targets, outs)]
+        # Sequential: Vietnamese pivots through the English translation, so
+        # English must be produced first.
+        translations, en_text = [], None
+        for tgt in targets:
+            src_text, src_code = original, lang_cfg["nllb_src"][lang]
+            if lang_cfg["pivot_through_english"] and tgt != "en" and en_text:
+                src_text, src_code = en_text, "eng_Latn"
+            out = translator.translate(src_text, src_code, lang_cfg["nllb_tgt"][tgt])
+            if tgt == "en":
+                en_text = out
+            translations.append({"lang": tgt, "text": out})
+        return translations
 
     def asr_worker():
         import time as _time
@@ -224,7 +261,6 @@ def start_pipeline(loop, source_file=None):
             )
             if not text or is_junk(text):
                 continue
-            lang_cfg = CONFIG["languages"]
             if lang in ("zh", "yue"):
                 lang = "yue"
             # Whisper's language ID is unreliable on short utterances (the
@@ -248,28 +284,22 @@ def start_pipeline(loop, source_file=None):
                 original = text
 
             if kind == "partial":
-                emit_threadsafe(loop, {"type": "partial", "lang": lang, "original": original})
+                # Show translations forming live during the speech. But if a
+                # final for this (or the next) utterance is already queued, skip
+                # the partial's NLLB work — the final's own translations are
+                # milliseconds away and must not wait behind a throwaway partial.
+                with job_lock:
+                    final_waiting = bool(final_jobs)
+                if final_waiting:
+                    emit_threadsafe(loop, {
+                        "type": "partial", "lang": lang, "original": original})
+                    continue
+                emit_threadsafe(loop, {
+                    "type": "partial", "lang": lang, "original": original,
+                    "translations": translate_all(lang, original, partial=True)})
                 continue
 
-            translations = []
-            targets = lang_cfg["targets"][lang]
-            if lang == "en":
-                # Targets are independent of each other, so batch them in one call.
-                tgt_codes = [lang_cfg["nllb_tgt"][t] for t in targets]
-                outs = translator.translate_multi(original, "eng_Latn", tgt_codes)
-                translations = [{"lang": t, "text": o} for t, o in zip(targets, outs)]
-            else:
-                # Sequential: Vietnamese pivots through the English translation,
-                # so English must be produced first.
-                en_text = None
-                for tgt in targets:
-                    src_text, src_code = original, lang_cfg["nllb_src"][lang]
-                    if lang_cfg["pivot_through_english"] and tgt != "en" and en_text:
-                        src_text, src_code = en_text, "eng_Latn"
-                    out = translator.translate(src_text, src_code, lang_cfg["nllb_tgt"][tgt])
-                    if tgt == "en":
-                        en_text = out
-                    translations.append({"lang": tgt, "text": out})
+            translations = translate_all(lang, original)
             elapsed = _time.time() - t0
             print(f"[{lang}] ({elapsed:.1f}s) {original}  =>  "
                   + "  |  ".join(t["text"] for t in translations))
@@ -392,9 +422,22 @@ def main():
 
     if args.model:
         mlx_model, fw_model = WHISPER_MODELS[args.model]
+        # Locally-converted models (e.g. "cantonese") are stored as repo-relative
+        # folders; make them absolute so the model loads regardless of CWD. Hub
+        # repo IDs ("mlx-community/...") have no local folder, so pass through.
+        def _resolve(m):
+            local = ROOT / m
+            return str(local) if local.exists() else m
+        mlx_model, fw_model = _resolve(mlx_model), _resolve(fw_model)
         CONFIG["asr"]["mlx_model"] = mlx_model
         CONFIG["asr"]["fw_model"] = fw_model
         print(f"Whisper model: {args.model} ({mlx_model})")
+        if args.model == "cantonese" and mlx_model.startswith(("mlx-", "models")):
+            if not (ROOT / WHISPER_MODELS["cantonese"][0]).exists() \
+                    and not (ROOT / WHISPER_MODELS["cantonese"][1]).exists():
+                sys.exit("Cantonese model not found. Run the converter first:\n"
+                         "  python convert_cantonese.py   (or double-click "
+                         "'Convert Cantonese')")
 
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)

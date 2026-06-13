@@ -18,8 +18,10 @@ mic / mixer feed
 ```
 
 - While someone speaks, a live partial transcript scrolls in the top "listening"
-  bar. At each natural pause the sentence is finalised as the headline and its
-  translations appear beneath it.
+  bar **and dimmed live translations form on screen** beneath it. At each natural
+  pause the sentence is finalised — the translations sharpen and lock in with a
+  brief reveal. Showing translations as they form (rather than only at the end of
+  each sentence) is what keeps the captions feeling in-sync with the speaker.
 - English speeches are subtitled in **Standard Written Chinese, Traditional
   characters** (what HK TV subtitles use — readable by every Cantonese speaker)
   plus Vietnamese.
@@ -126,16 +128,34 @@ Set `audio.device` in `config.json` to the device index from `--list-devices`
 
 | Key | What it does |
 |---|---|
-| `vad.min_silence_ms` | Pause length that finalises a sentence. Lower = snappier, more fragmented. |
-| `vad.partial_interval_s` | How often live partial text updates (0 disables partials). |
+| `vad.min_silence_ms` | Pause length that finalises a sentence (400 ms). Lower = snappier, more fragmented. |
+| `vad.partial_interval_s` | How often live partials (incl. their translations) refresh (1.5 s; 0 disables partials). |
 | `vad.max_utterance_s` | Force-finalise long monologues so captions never lag too far. |
 | `asr.initial_prompt` | Bias vocabulary — names, venue, "wedding speeches". |
+| `asr.temperature` | `0` = one fast greedy pass (default). Set `[0.0, 0.2, 0.4]` to re-decode hard segments for accuracy, at the cost of occasional lag spikes. |
 | `languages.targets` | Which translations each input language gets on screen. |
 | `languages.nllb_tgt.yue` | `zho_Hant` (default) or `yue_Hant` for colloquial written Cantonese (experimental). |
 | `filter.blocklist` | Known Whisper hallucinations to suppress (e.g. the Amara.org subtitle credit). |
 
-## If Cantonese accuracy disappoints
+## Cantonese accuracy — the tuned model
 
-Stock `large-v3-turbo` is the speed/quality sweet spot, but community Cantonese
-fine-tunes exist on Hugging Face (search "whisper cantonese"). Swap via
-`asr.mlx_model` / `asr.fw_model` in `config.json` — any Whisper-format model works.
+Stock `large-v3-turbo` is the speed/quality sweet spot for English, but only okay
+at Cantonese. A bilingual (EN + Cantonese, code-switch aware) fine-tune of the
+**same turbo backbone** is bundled as an option — same speed, better Cantonese.
+
+It ships as a Hugging Face fine-tune that needs a one-time conversion to this
+machine's Whisper format (MLX on Mac, CTranslate2 on Windows). Convert once on
+wifi, then it's selectable like any other model:
+
+1. **Convert** (downloads ~1.6 GB, one-time): double-click **`Convert Cantonese`**
+   (`.command` on Mac, `.bat` on Windows), or run `python convert_cantonese.py`.
+2. **Use it:** on Mac, `Start Captions` now offers a **`6) cantonese`** choice; on
+   Windows (or any terminal), `python server.py --model cantonese`.
+3. **Switch back** anytime by picking `turbo` — nothing is overwritten, so you can
+   A/B the two with real speakers in rehearsal.
+
+To try a *different* Cantonese fine-tune, point the converter at it:
+`python convert_cantonese.py --model <hf-repo-id>`. Any Whisper-format model on
+Hugging Face works; `convert_cantonese.py` documents the default and why it was
+chosen. You can also still hand-edit `asr.mlx_model` / `asr.fw_model` in
+`config.json` for an already-converted or pre-packaged model.

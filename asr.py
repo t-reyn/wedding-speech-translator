@@ -18,6 +18,11 @@ class MlxWhisperASR:
         self.mlx_whisper = mlx_whisper
         self.model = cfg["mlx_model"]
         self.beam_final = cfg["beam_size_final"]
+        # A single temperature (0) means one greedy pass with no fallback. The
+        # default is a tuple, which silently re-decodes hard segments at rising
+        # temperatures — fine offline, but on a live feed (applause, laughter,
+        # cross-talk between speeches) those retries are multi-second lag spikes.
+        self.temperature = cfg.get("temperature", 0)
         self.mlx_whisper.transcribe(np.zeros(16000, dtype=np.float32),
                                     path_or_hf_repo=self.model)
 
@@ -25,6 +30,7 @@ class MlxWhisperASR:
         result = self.mlx_whisper.transcribe(
             audio, path_or_hf_repo=self.model,
             language=language, initial_prompt=initial_prompt,
+            temperature=self.temperature,
             condition_on_previous_text=False, fp16=True)
         segments = [s for s in result["segments"]
                     if not (s["no_speech_prob"] > 0.6 and s["avg_logprob"] < -1.0)]
@@ -36,6 +42,7 @@ class FasterWhisperASR:
     def __init__(self, cfg):
         from faster_whisper import WhisperModel
         self.beam_final = cfg["beam_size_final"]
+        self.temperature = cfg.get("temperature", 0)
         self.model = None
         cuda_compute = cfg.get("cuda_compute_type", "int8_float16")
         if cfg.get("device", "auto") in ("auto", "cuda"):
@@ -57,6 +64,7 @@ class FasterWhisperASR:
         segments, info = self.model.transcribe(
             audio, language=language, initial_prompt=initial_prompt,
             beam_size=self.beam_final if final else 1,
+            temperature=self.temperature,
             condition_on_previous_text=False, vad_filter=False)
         segments = [s for s in segments
                     if not (s.no_speech_prob > 0.6 and s.avg_logprob < -1.0)]

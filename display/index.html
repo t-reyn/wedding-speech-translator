@@ -62,6 +62,10 @@
 
   .txt-line{opacity:1;transform:none;animation:reveal .58s cubic-bezier(.2,.7,.2,1);}
   @keyframes reveal{from{opacity:0;transform:translateY(16px);}to{opacity:1;transform:none;}}
+  /* Live partial: translations still forming. Dimmed and un-animated so the
+     text can update in place every couple of seconds without flicker; the
+     final render drops .provisional and runs the reveal to "lock it in". */
+  .stack.provisional .txt{opacity:.5;transition:opacity .25s ease;}
 
   .idle{color:var(--source);font-family:'IBM Plex Mono',monospace;font-size:clamp(13px,1.1vw,17px);
     letter-spacing:.1em;}
@@ -107,23 +111,13 @@
     $('lbl').textContent = 'Listening · ' + LANGS[spoken].name;
   }
 
-  function renderPartial(msg) {
-    if (msg.lang in LANGS) spoken = msg.lang;
-    setTopbar();
-    $('partial').textContent = nfc(msg.original) || '';
-  }
-
-  function renderFinal(msg) {
-    if (msg.lang in LANGS) spoken = msg.lang;
-    setTopbar();
-    $('partial').textContent = '';
-
+  function renderStack(msg, isFinal) {
     const utt = { [msg.lang]: msg.original };
     for (const t of msg.translations || []) utt[t.lang] = t.text;
 
-    uttId++;
     const stack = $('stack');
     stack.innerHTML = '';
+    stack.classList.toggle('provisional', !isFinal);
     orderFor(spoken).forEach((k, i) => {
       if (!(k in utt)) return;
       const L = LANGS[k];
@@ -143,16 +137,35 @@
       row.append(chip, name, rule);
 
       const line = document.createElement('div');
-      line.className = 'txt txt-line' + (k === 'yue' ? ' cjk' : '');
+      // Reveal animation only on the final, so live partial updates don't
+      // re-slide every couple of seconds.
+      line.className = 'txt' + (isFinal ? ' txt-line' : '') + (k === 'yue' ? ' cjk' : '');
       // Primary line is cream for legibility, except Cantonese keeps its green
       // accent even when it's the spoken/primary language (per request).
       line.style.color = (prim && k !== 'yue') ? 'var(--cream)' : L.color;
-      line.style.animationDelay = (i * 0.09) + 's';
+      if (isFinal) line.style.animationDelay = (i * 0.09) + 's';
       line.textContent = nfc(utt[k]);
 
       block.append(row, line);
       stack.append(block);
     });
+  }
+
+  function renderPartial(msg) {
+    if (msg.lang in LANGS) spoken = msg.lang;
+    setTopbar();
+    $('partial').textContent = nfc(msg.original) || '';
+    // Partials now carry live translations (unless a final was already queued).
+    // Render them provisionally; if none, leave the previous final on screen.
+    if (msg.translations && msg.translations.length) renderStack(msg, false);
+  }
+
+  function renderFinal(msg) {
+    if (msg.lang in LANGS) spoken = msg.lang;
+    setTopbar();
+    $('partial').textContent = '';
+    uttId++;
+    renderStack(msg, true);
   }
 
   let retryMs = 1000;
