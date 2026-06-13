@@ -132,7 +132,7 @@ Set `audio.device` in `config.json` to the device index from `--list-devices`
 | `vad.partial_interval_s` | How often live partials (incl. their translations) refresh (1.5 s; 0 disables partials). |
 | `vad.max_utterance_s` | Force-finalise long monologues so captions never lag too far. |
 | `asr.initial_prompt` | Bias vocabulary — names, venue, "wedding speeches". |
-| `asr.temperature` | `0` = one fast greedy pass (default). Set `[0.0, 0.2, 0.4]` to re-decode hard segments for accuracy, at the cost of occasional lag spikes. |
+| `asr.temperature` | Fallback temperatures. `[0.0, 0.2, 0.4]` (default) retries a degenerate/repetitive segment at a higher temperature — clean audio still passes on the first greedy try. Set `0` for one pass only (lowest latency, but repetition loops can reach the screen). |
 | `languages.targets` | Which translations each input language gets on screen. |
 | `languages.nllb_tgt.yue` | `zho_Hant` (default) or `yue_Hant` for colloquial written Cantonese (experimental). |
 | `filter.blocklist` | Known Whisper hallucinations to suppress (e.g. the Amara.org subtitle credit). |

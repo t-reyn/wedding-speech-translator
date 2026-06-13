@@ -16,7 +16,7 @@
     "mlx_model": "mlx-community/whisper-large-v3-turbo",
     "fw_model": "large-v3-turbo",
     "beam_size_final": 5,
-    "temperature": 0,
+    "temperature": [0.0, 0.2, 0.4],
     "cuda_compute_type": "int8_float16",
     "initial_prompt": "Wedding speeches and toasts for the bride Ellese Ha and groom Reynold To. Other names: Vinh Ha, Vinh To, Sue La, Amy Ha, Ricky Ha, Brian He, Wilson Ngo, Shafif Aurik, Julian Widjaja, Jeehun Kim, Austin Lei, Leyen Nguyen, Jazz Oey. Venue: Villa Plenilunio. 婚禮致辭。"
   },

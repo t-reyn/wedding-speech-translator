@@ -25,6 +25,7 @@ import argparse
 import asyncio
 import faulthandler
 import json
+import re
 import sys
 import threading
 from pathlib import Path
@@ -95,6 +96,40 @@ async def broadcaster():
 
 def emit_threadsafe(loop, msg):
     loop.call_soon_threadsafe(out_queue.put_nowait, msg)
+
+
+def collapse_repeats(text):
+    """Defuse Whisper repetition loops ("okay okay okay…", "好好好好…") without
+    harming real speech. Greedy decoding (beam_size 1 on partials) and the
+    no-fallback temperature setting both make these loops more likely, and a
+    looped caption reads as high-confidence so the no_speech/logprob filter
+    misses it. Natural emphasis (a word or short phrase doubled) is preserved."""
+    ws = text.split()
+    # Immediately-repeated phrases (longest first) collapse to one copy.
+    for n in (4, 3, 2):
+        i, out = 0, []
+        while i < len(ws):
+            if i + 2 * n <= len(ws) and ws[i:i + n] == ws[i + n:i + 2 * n]:
+                out.extend(ws[i:i + n])
+                j = i + n
+                while j + n <= len(ws) and ws[j:j + n] == ws[i:i + n]:
+                    j += n
+                i = j
+            else:
+                out.append(ws[i])
+                i += 1
+        ws = out
+    # A single word repeated in a row: keep at most two ("very very" is fine).
+    capped = []
+    for w in ws:
+        if len(capped) >= 2 and w == capped[-1] == capped[-2]:
+            continue
+        capped.append(w)
+    text = " ".join(capped)
+    # Spaceless loops (mostly CJK): same char x4+, or a 2-8 char chunk x3+.
+    text = re.sub(r"([一-鿿])\1{3,}", r"\1", text)
+    text = re.sub(r"(.{2,8}?)\1{2,}", r"\1", text)
+    return text.strip()
 
 
 DEMO_SCRIPT = [
@@ -259,6 +294,9 @@ def start_pipeline(loop, source_file=None):
                 initial_prompt=CONFIG["asr"]["initial_prompt"],
                 final=(kind == "final"),
             )
+            if not text or is_junk(text):
+                continue
+            text = collapse_repeats(text)
             if not text or is_junk(text):
                 continue
             if lang in ("zh", "yue"):
