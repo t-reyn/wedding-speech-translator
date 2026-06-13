@@ -34,71 +34,53 @@ mic / mixer feed
   it a `targets` list, e.g. `"vi": ["en", "yue"]`.
 - Expected delay: roughly 1.5–2.5 s behind the speaker.
 
-## Installation
+## Install it
 
-> This repo is **private**, so cloning requires being signed in to the
-> `t-reyn` GitHub account. The model download (~4 GB) is one-time — do it at
-> home on good wifi, not at the venue.
+Same app on Mac and Windows. The one-time setup downloads about **4 GB**, so do
+it **at home on wifi**, not at the venue. It takes ~20–30 minutes, mostly waiting.
 
-**The short version:** get the code (step 1 below), double-click **`Install`**,
-then double-click **`Start Captions`**. That's it — the installer handles Python
-packages, the GPU, and the 4 GB model download for you.
+### Mac (the wedding laptop)
 
-### macOS (MacBook Pro, Apple Silicon — the wedding machine)
-
-**1. Get the code.** Easiest with no terminal: install
-[GitHub Desktop](https://desktop.github.com), sign in to the `t-reyn` account,
-and **File → Clone repository → `wedding-speech-translator`**. It saves to a
-folder it shows you (usually `Documents/GitHub/wedding-speech-translator`).
-
-<details><summary>Prefer the terminal?</summary>
+Open **Terminal** (press ⌘-Space, type `Terminal`, press Return), then paste this
+one line and press Return:
 
 ```bash
-xcode-select --install                                   # git + python3
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-brew install gh && gh auth login                         # sign in: GitHub.com → HTTPS → browser
-gh repo clone t-reyn/wedding-speech-translator
+curl -fsSL https://raw.githubusercontent.com/t-reyn/wedding-speech-translator/main/install-mac.sh | bash
 ```
-</details>
 
-**2. Install — double-click `Install.command`.** It builds everything and
-downloads the models (~4 GB; do it at home on good wifi, not at the venue).
-First time, macOS Gatekeeper blocks double-clicked scripts — **right-click
-`Install.command` → Open → Open** (only needed once per script).
+It downloads and sets everything up, then opens the app folder. If a "developer
+tools" popup appears, click **Install**, wait for it to finish, then paste the
+same line again — that only happens once.
 
-**3. Run — double-click `Start Captions.command`.** Grant **microphone access
-to Terminal** when prompted (or System Settings → Privacy & Security →
-Microphone). For a quick look without mic/models, use `Start Captions (Demo).command`.
-
-The Mac uses the Apple GPU automatically via MLX — no extra setup.
+When it's done, double-click **`Start Captions.command`** in the folder it
+opened (or the **Wedding Captions** shortcut it put on your Desktop). Click
+**OK** to allow the microphone, and the caption screen opens in your browser.
 
 ### Windows
 
-**1. Get the code.** With no terminal: install
-[GitHub Desktop](https://desktop.github.com), sign in, and
-**File → Clone repository → `wedding-speech-translator`**.
-
-<details><summary>Prefer PowerShell?</summary>
+Open **PowerShell** (press Start, type `PowerShell`, press Return), then paste
+this one line and press Return:
 
 ```powershell
-winget install Git.Git GitHub.cli                        # git + gh
-gh auth login                                            # sign in: GitHub.com → HTTPS → browser
-gh repo clone t-reyn/wedding-speech-translator
+irm https://raw.githubusercontent.com/t-reyn/wedding-speech-translator/main/install-windows.ps1 | iex
 ```
+
+If it needs to install Git or Python, it'll ask you to close PowerShell, open a
+new one, and paste the line again. When it finishes it opens the app folder —
+double-click **`Start Captions.bat`** to run it. (On a PC with an NVIDIA graphics
+card it automatically runs 3–4× faster.)
+
+<details><summary>Don't want to type a command? Use GitHub Desktop instead.</summary>
+
+Install [GitHub Desktop](https://desktop.github.com), then **File → Clone
+repository → URL** and paste `https://github.com/t-reyn/wedding-speech-translator`.
+Open the cloned folder and double-click **`Install`** (`Install.command` on Mac,
+`Install.bat` on Windows), then **`Start Captions`**. On Mac, if a double-click
+is blocked the first time, right-click the file → **Open** → **Open**.
 </details>
 
-**2. Install — double-click `Install.bat`.** It installs Python if needed
-(if it does, close the window and double-click `Install.bat` again), sets up
-the packages, auto-enables NVIDIA GPU acceleration if a card is present, and
-downloads the models (~4 GB).
-
-**3. Run — double-click `Start Captions.bat`** (or `Start Captions (Demo).bat`
-for the scripted demo). On a machine with an NVIDIA GPU, look for
-`Whisper: using CUDA (GPU).` in `captions_log.txt`; without one it runs on CPU,
-just slower.
-
-> The launchers log to `captions_log.txt` next to the scripts and auto-restart
-> the server if it ever exits, so captions come back by themselves mid-event.
+> The launchers log to `captions_log.txt` and auto-restart the server if it ever
+> stops, so captions come back on their own mid-event.
 
 ## Running
 
