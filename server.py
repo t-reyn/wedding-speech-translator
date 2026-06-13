@@ -10,16 +10,16 @@ Display:  display/index.html, served at http://localhost:8765/
 
 import os
 
-# torch (VAD), CTranslate2 (Whisper + NLLB) and numpy each bundle their own
-# Intel OpenMP/MKL runtime. Loading several into one process causes random native
-# "access violation" crashes on Windows (Intel's Fortran RTL also aborts the whole
-# process on console-close events). Pin to one OpenMP runtime + a single CPU thread
-# (the heavy work runs on the GPU now, so this costs almost nothing) and silence the
-# Fortran console handler. Set before any of those libraries import. No-op on macOS.
-os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
-os.environ.setdefault("OMP_NUM_THREADS", "1")
-os.environ.setdefault("MKL_NUM_THREADS", "1")
-os.environ.setdefault("FOR_DISABLE_CONSOLE_CTRL_HANDLER", "1")
+# Windows-only: torch/CTranslate2/numpy each bundle their own Intel OpenMP/MKL
+# runtime; loading several in one process causes random native crashes on
+# Windows. Pinning to one runtime + a single thread fixes that. On macOS this
+# MUST be skipped — a single thread throttles CTranslate2 to one core and is the
+# main cause of caption latency.
+if os.name == "nt":
+    os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
+    os.environ.setdefault("OMP_NUM_THREADS", "1")
+    os.environ.setdefault("MKL_NUM_THREADS", "1")
+    os.environ.setdefault("FOR_DISABLE_CONSOLE_CTRL_HANDLER", "1")
 
 import argparse
 import asyncio
