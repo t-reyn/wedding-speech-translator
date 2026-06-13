@@ -252,16 +252,24 @@ def start_pipeline(loop, source_file=None):
                 continue
 
             translations = []
-            en_text = original if lang == "en" else None
-            for tgt in lang_cfg["targets"][lang]:
-                src_text, src_code = original, lang_cfg["nllb_src"][lang]
-                if (lang_cfg["pivot_through_english"] and lang != "en"
-                        and tgt != "en" and en_text):
-                    src_text, src_code = en_text, "eng_Latn"
-                out = translator.translate(src_text, src_code, lang_cfg["nllb_tgt"][tgt])
-                if tgt == "en":
-                    en_text = out
-                translations.append({"lang": tgt, "text": out})
+            targets = lang_cfg["targets"][lang]
+            if lang == "en":
+                # Targets are independent of each other, so batch them in one call.
+                tgt_codes = [lang_cfg["nllb_tgt"][t] for t in targets]
+                outs = translator.translate_multi(original, "eng_Latn", tgt_codes)
+                translations = [{"lang": t, "text": o} for t, o in zip(targets, outs)]
+            else:
+                # Sequential: Vietnamese pivots through the English translation,
+                # so English must be produced first.
+                en_text = None
+                for tgt in targets:
+                    src_text, src_code = original, lang_cfg["nllb_src"][lang]
+                    if lang_cfg["pivot_through_english"] and tgt != "en" and en_text:
+                        src_text, src_code = en_text, "eng_Latn"
+                    out = translator.translate(src_text, src_code, lang_cfg["nllb_tgt"][tgt])
+                    if tgt == "en":
+                        en_text = out
+                    translations.append({"lang": tgt, "text": out})
             elapsed = _time.time() - t0
             print(f"[{lang}] ({elapsed:.1f}s) {original}  =>  "
                   + "  |  ".join(t["text"] for t in translations))

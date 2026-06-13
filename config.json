@@ -30,7 +30,7 @@
     "hf_model": "facebook/nllb-200-distilled-1.3B",
     "model_dir": "models/nllb-ct2",
     "device": "auto",
-    "beam_size": 2,
+    "beam_size": 1,
     "protect_names": [
       "Ellese Ha", "Reynold To", "Vinh Ha", "Vinh To", "Sue La", "Amy Ha",
       "Ricky Ha", "Brian He", "Wilson Ngo", "Shafif Aurik", "Julian Widjaja",

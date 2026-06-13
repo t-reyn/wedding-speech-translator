@@ -68,6 +68,31 @@ class CaptionTranslator:
             out = out.replace(token, name)
         return out.strip()
 
+    def translate_multi(self, text, src_lang, tgt_langs):
+        """Translate one source string to several targets in one batch.
+        Returns a list of strings aligned to tgt_langs."""
+        text, restores = self._shield(text)
+        self.tokenizer.src_lang = src_lang
+        tokens = self.tokenizer.convert_ids_to_tokens(self.tokenizer.encode(text))
+        results = self.translator.translate_batch(
+            [tokens] * len(tgt_langs),
+            target_prefix=[[t] for t in tgt_langs],
+            beam_size=self.beam_size, max_decoding_length=256)
+        outs = []
+        for tgt_lang, res in zip(tgt_langs, results):
+            out_tokens = res.hypotheses[0]
+            if out_tokens and out_tokens[0] == tgt_lang:
+                out_tokens = out_tokens[1:]
+            out = self.tokenizer.decode(
+                self.tokenizer.convert_tokens_to_ids(out_tokens),
+                skip_special_tokens=True)
+            if tgt_lang.endswith("_Hant") or tgt_lang.endswith("_Hans"):
+                out = _opencc.convert(out)
+            for token, name in restores:
+                out = out.replace(token, name)
+            outs.append(out.strip())
+        return outs
+
     def _shield(self, text):
         restores = []
         for rx, name in self._shields:
