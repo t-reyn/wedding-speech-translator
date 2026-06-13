@@ -7,6 +7,12 @@ set "KMP_DUPLICATE_LIB_OK=TRUE"
 set "OMP_NUM_THREADS=1"
 set "MKL_NUM_THREADS=1"
 set "FOR_DISABLE_CONSOLE_CTRL_HANDLER=1"
+
+rem Prefer the installer's virtualenv, fall back to a global Python 3.12, then PATH.
+set "PY=%~dp0venv\Scripts\python.exe"
+if not exist "%PY%" set "PY=%LOCALAPPDATA%\Programs\Python\Python312\python.exe"
+if not exist "%PY%" set "PY=python"
+
 echo Starting Wedding Speech Translator (live mic)...
 echo Models can take 10-30s to load on first run. Watch the browser tab.
 echo All output is logged to: captions_log.txt
@@ -15,7 +21,7 @@ echo.
 start "" http://localhost:8765/
 :loop
 echo ---- server starting %date% %time% ---->> "%LOG%"
-"%LOCALAPPDATA%\Programs\Python\Python312\python.exe" -u server.py >> "%LOG%" 2>&1
+"%PY%" -u server.py >> "%LOG%" 2>&1
 echo ---- server exited %date% %time% ---->> "%LOG%"
 echo.
 echo Server stopped unexpectedly - restarting in 3s (close this window or Ctrl+C to quit)...
