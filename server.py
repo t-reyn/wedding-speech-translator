@@ -42,6 +42,18 @@ if hasattr(sys.stdout, "reconfigure"):
 ROOT = Path(__file__).parent
 CONFIG = json.loads((ROOT / "config.json").read_text(encoding="utf-8"))
 
+# Whisper model sizes, fastest -> most accurate. `--model` overrides config.json
+# so you can trade a few seconds of lag for accuracy at startup. Each entry is
+# (mlx-whisper repo for Apple Silicon, faster-whisper name for everything else).
+# All multilingual (EN + Cantonese both need detecting). turbo == config default.
+WHISPER_MODELS = {
+    "tiny":   ("mlx-community/whisper-tiny-mlx", "tiny"),
+    "base":   ("mlx-community/whisper-base-mlx", "base"),
+    "small":  ("mlx-community/whisper-small-mlx", "small"),
+    "medium": ("mlx-community/whisper-medium-mlx", "medium"),
+    "turbo":  ("mlx-community/whisper-large-v3-turbo", "large-v3-turbo"),
+}
+
 clients: set[web.WebSocketResponse] = set()
 # Bound to the server's event loop in main(); constructing it at import time would
 # bind its internal futures to the wrong loop (broadcaster then dies with
@@ -360,12 +372,21 @@ def main():
     parser.add_argument("--file", metavar="WAV",
                         help="stream a mono 16 kHz WAV through the real pipeline instead of the mic")
     parser.add_argument("--list-devices", action="store_true")
+    parser.add_argument("--model", choices=list(WHISPER_MODELS),
+                        help="Whisper model size (smaller = less lag, less accurate). "
+                             "Default: config.json. tiny/base/small/medium/turbo.")
     args = parser.parse_args()
 
     if args.list_devices:
         import sounddevice as sd
         print(sd.query_devices())
         return
+
+    if args.model:
+        mlx_model, fw_model = WHISPER_MODELS[args.model]
+        CONFIG["asr"]["mlx_model"] = mlx_model
+        CONFIG["asr"]["fw_model"] = fw_model
+        print(f"Whisper model: {args.model} ({mlx_model})")
 
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
