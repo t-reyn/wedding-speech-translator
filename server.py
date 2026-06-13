@@ -43,7 +43,10 @@ ROOT = Path(__file__).parent
 CONFIG = json.loads((ROOT / "config.json").read_text(encoding="utf-8"))
 
 clients: set[web.WebSocketResponse] = set()
-out_queue: asyncio.Queue = asyncio.Queue()
+# Bound to the server's event loop in main(); constructing it at import time would
+# bind its internal futures to the wrong loop (broadcaster then dies with
+# "got Future attached to a different loop" and no captions reach the browser).
+out_queue: asyncio.Queue = None  # type: ignore[assignment]
 
 
 async def index(request):
@@ -366,6 +369,9 @@ def main():
 
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
+
+    global out_queue
+    out_queue = asyncio.Queue()
 
     app = web.Application()
     app.router.add_get("/", index)
