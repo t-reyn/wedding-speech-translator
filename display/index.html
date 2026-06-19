@@ -160,7 +160,25 @@
     if (msg.translations && msg.translations.length) renderStack(msg, false);
   }
 
+  // Last-line garbage guard: a single VAD segment is capped at ~8s, so a real
+  // caption can't be hundreds of chars or a char repeated dozens of times.
+  // Reject such finals so a hallucination that slipped past the server filters
+  // is never projected; the previous good caption stays on screen.
+  function looksLikeGarbage(msg) {
+    const orig = msg.original || '';
+    if (orig.length > 220) return true;
+    if (/(.)\1{9,}/u.test(orig)) return true;          // same char 10+ in a row
+    for (const t of msg.translations || []) {
+      const x = t.text || '';
+      if (x.length > 320) return true;                 // translations (esp. VI) run longer
+      if (orig.length && x.length > orig.length * 4) return true;
+      if (/(.)\1{9,}/u.test(x)) return true;
+    }
+    return false;
+  }
+
   function renderFinal(msg) {
+    if (looksLikeGarbage(msg)) { console.warn('caption rejected by garbage guard:', msg); return; }
     if (msg.lang in LANGS) spoken = msg.lang;
     setTopbar();
     $('partial').textContent = '';

@@ -35,6 +35,14 @@ class CaptionTranslator:
         self._shields = [
             (re.compile(r"\b" + re.escape(n) + r"\b", re.IGNORECASE), n)
             for n in names]
+        # Warm up CT2's compute buffers + the tokenizer so the first real caption
+        # (the highest-visibility one) doesn't eat the cold-start spike. Covers the
+        # batched EN path (translate_multi, 2 targets) and the yue batch-1 path.
+        try:
+            self.translate_multi("warm up", "eng_Latn", ["zho_Hant", "vie_Latn"])
+            self.translate("warm up", "yue_Hant", "eng_Latn")
+        except Exception:
+            pass
 
     @staticmethod
     def _load(model_dir, device):
@@ -55,7 +63,8 @@ class CaptionTranslator:
         tokens = self.tokenizer.convert_ids_to_tokens(self.tokenizer.encode(text))
         results = self.translator.translate_batch(
             [tokens], target_prefix=[[tgt_lang]],
-            beam_size=self.beam_size, max_decoding_length=256)
+            beam_size=self.beam_size, max_decoding_length=128,
+            repetition_penalty=1.1, no_repeat_ngram_size=3)
         out_tokens = results[0].hypotheses[0]
         if out_tokens and out_tokens[0] == tgt_lang:
             out_tokens = out_tokens[1:]
@@ -74,10 +83,14 @@ class CaptionTranslator:
         text, restores = self._shield(text)
         self.tokenizer.src_lang = src_lang
         tokens = self.tokenizer.convert_ids_to_tokens(self.tokenizer.encode(text))
+        # An 8s utterance never needs >~80 output tokens; this cap + the
+        # repetition penalties stop a looped Whisper hallucination from being
+        # amplified into a runaway decode across zh-Hant + VI.
         results = self.translator.translate_batch(
             [tokens] * len(tgt_langs),
             target_prefix=[[t] for t in tgt_langs],
-            beam_size=self.beam_size, max_decoding_length=256)
+            beam_size=self.beam_size, max_decoding_length=128,
+            repetition_penalty=1.1, no_repeat_ngram_size=3)
         outs = []
         for tgt_lang, res in zip(tgt_langs, results):
             out_tokens = res.hypotheses[0]

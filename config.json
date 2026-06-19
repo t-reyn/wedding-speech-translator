@@ -8,7 +8,10 @@
     "min_silence_ms": 400,
     "preroll_ms": 300,
     "max_utterance_s": 8,
-    "partial_interval_s": 1.5
+    "partial_interval_s": 1.5,
+    "min_speech_ratio": 0.4,
+    "min_speech_s": 0.5,
+    "energy_floor": 0.0
   },
   "asr": {
     "backend": "auto",
@@ -16,9 +19,9 @@
     "mlx_model": "mlx-community/whisper-large-v3-turbo",
     "fw_model": "large-v3-turbo",
     "beam_size_final": 5,
-    "temperature": [0.0, 0.2, 0.4],
+    "temperature": 0,
     "cuda_compute_type": "int8_float16",
-    "initial_prompt": "Wedding speeches and toasts for the bride Ellese Ha and groom Reynold To. Other names: Vinh Ha, Vinh To, Sue La, Amy Ha, Ricky Ha, Brian He, Wilson Ngo, Shafif Aurik, Julian Widjaja, Jeehun Kim, Austin Lei, Leyen Nguyen, Jazz Oey. Venue: Villa Plenilunio. 婚禮致辭。"
+    "initial_prompt": "Wedding speeches and toasts for the bride Ellese Ha and groom Reynold To. Other names: Vinh Ha, Vinh To, Sue La, Amy Ha, Ricky Ha, Brian He, Wilson Ngo, Shafif Aurik, Julian Widjaja, Jeehun Kim, Austin Lei, Leyen Nguyen, Jazz Oey. Venue: Villa Plenilunio."
   },
   "languages": {
     "detect": ["en", "yue"],
@@ -55,7 +58,9 @@
       "婚禮致辭",
       "婚礼致辞",
       "wedding speeches and toasts"
-    ]
+    ],
+    "max_compression_ratio": 3.0,
+    "min_gate_len": 24
   },
   "server": {
     "host": "0.0.0.0",

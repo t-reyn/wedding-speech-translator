@@ -28,6 +28,8 @@ import json
 import re
 import sys
 import threading
+import traceback
+import zlib
 from pathlib import Path
 
 # Dump the C-level stack of every thread if a native lib (PortAudio, CTranslate2,
@@ -90,7 +92,11 @@ async def broadcaster():
         for ws in list(clients):
             try:
                 await ws.send_str(data)
-            except ConnectionResetError:
+            # Broad on purpose: a half-closed socket can raise more than
+            # ConnectionResetError, and this task is unsupervised — one stray
+            # exception would kill the broadcaster and stop ALL captions. Not
+            # BaseException, so asyncio CancelledError still cancels on shutdown.
+            except Exception:
                 clients.discard(ws)
 
 
@@ -221,6 +227,20 @@ def start_pipeline(loop, source_file=None):
         # are just a guest's name listed in the prompt.
         return any(b in t for b in blocklist)
 
+    max_ratio = CONFIG["filter"].get("max_compression_ratio", 3.0)
+    min_gate_len = CONFIG["filter"].get("min_gate_len", 24)
+
+    def is_hallucinated(text):
+        """Confident, repetitive hallucinations (looped phrases, name-salad on
+        music/applause) compress far more than real speech, yet decode as
+        high-confidence so the no_speech/logprob segment filter misses them.
+        Bytes/compressed-bytes is script-uniform, so CJK loops score as high as
+        English ones; genuine captions sit well under max_ratio."""
+        b = text.encode("utf-8")
+        if len(b) < min_gate_len:
+            return False
+        return len(b) / max(1, len(zlib.compress(b))) > max_ratio
+
     chunk_queue = []
     chunk_lock = threading.Condition()
 
@@ -285,67 +305,76 @@ def start_pipeline(loop, source_file=None):
                         partial_slot["audio"], partial_slot["utt_id"])
                     partial_slot.clear()
 
-            lang_hint = utt_langs.get(utt_id)
-            t0 = _time.time()
-            # Finals re-detect language from the full utterance; a hint cached
-            # from a partial's first seconds can poison the whole caption.
-            text, lang = asr.transcribe(
-                audio, language=lang_hint if kind == "partial" else None,
-                initial_prompt=CONFIG["asr"]["initial_prompt"],
-                final=(kind == "final"),
-            )
-            if not text or is_junk(text):
-                continue
-            text = collapse_repeats(text)
-            if not text or is_junk(text):
-                continue
-            if lang in ("zh", "yue"):
-                lang = "yue"
-            # Whisper's language ID is unreliable on short utterances (the
-            # bilingual initial_prompt skews it). A Cantonese transcript routed
-            # as "en" reaches NLLB tagged eng_Latn, and NLLB answers mislabeled
-            # input by copying it through untranslated. The transcript's own
-            # script is the ground truth, so let it override a contradiction.
-            cjk = sum(1 for ch in text if "一" <= ch <= "鿿")
-            latin = sum(1 for ch in text if ch.isascii() and ch.isalpha())
-            if lang == "en" and cjk > latin:
-                lang = "yue"
-            elif lang == "yue" and latin > cjk:
-                lang = "en"
-            if lang not in lang_cfg["detect"]:
-                lang = lang_hint or "en"
-            utt_langs[utt_id] = lang
-
-            if lang == "yue":
-                original = translator.to_traditional(text)
-            else:
-                original = text
-
-            if kind == "partial":
-                # Show translations forming live during the speech. But if a
-                # final for this (or the next) utterance is already queued, skip
-                # the partial's NLLB work — the final's own translations are
-                # milliseconds away and must not wait behind a throwaway partial.
-                with job_lock:
-                    final_waiting = bool(final_jobs)
-                if final_waiting:
-                    emit_threadsafe(loop, {
-                        "type": "partial", "lang": lang, "original": original})
+            # One bad utterance must not silently kill this daemon (it has no
+            # supervisor; faulthandler only catches native crashes). Isolate the
+            # whole transcribe/route/translate/emit body and keep looping.
+            try:
+                lang_hint = utt_langs.get(utt_id)
+                t0 = _time.time()
+                # Finals re-detect language from the full utterance; a hint cached
+                # from a partial's first seconds can poison the whole caption.
+                text, lang = asr.transcribe(
+                    audio, language=lang_hint if kind == "partial" else None,
+                    initial_prompt=CONFIG["asr"]["initial_prompt"],
+                    final=(kind == "final"),
+                )
+                if not text or is_junk(text):
                     continue
-                emit_threadsafe(loop, {
-                    "type": "partial", "lang": lang, "original": original,
-                    "translations": translate_all(lang, original, partial=True)})
-                continue
+                text = collapse_repeats(text)
+                if not text or is_junk(text):
+                    continue
+                if is_hallucinated(text):
+                    continue
+                if lang in ("zh", "yue"):
+                    lang = "yue"
+                # Whisper's language ID is unreliable on short utterances (the
+                # bilingual initial_prompt skews it). A Cantonese transcript routed
+                # as "en" reaches NLLB tagged eng_Latn, and NLLB answers mislabeled
+                # input by copying it through untranslated. The transcript's own
+                # script is the ground truth, so let it override a contradiction.
+                cjk = sum(1 for ch in text if "一" <= ch <= "鿿")
+                latin = sum(1 for ch in text if ch.isascii() and ch.isalpha())
+                if lang == "en" and cjk > latin:
+                    lang = "yue"
+                elif lang == "yue" and latin > cjk:
+                    lang = "en"
+                if lang not in lang_cfg["detect"]:
+                    lang = lang_hint or "en"
+                utt_langs[utt_id] = lang
 
-            translations = translate_all(lang, original)
-            elapsed = _time.time() - t0
-            print(f"[{lang}] ({elapsed:.1f}s) {original}  =>  "
-                  + "  |  ".join(t["text"] for t in translations))
-            emit_threadsafe(loop, {
-                "type": "final", "lang": lang,
-                "original": original, "translations": translations,
-            })
-            utt_langs.pop(utt_id, None)
+                if lang == "yue":
+                    original = translator.to_traditional(text)
+                else:
+                    original = text
+
+                if kind == "partial":
+                    # Show translations forming live during the speech. But if a
+                    # final for this (or the next) utterance is already queued, skip
+                    # the partial's NLLB work — the final's own translations are
+                    # milliseconds away and must not wait behind a throwaway partial.
+                    with job_lock:
+                        final_waiting = bool(final_jobs)
+                    if final_waiting:
+                        emit_threadsafe(loop, {
+                            "type": "partial", "lang": lang, "original": original})
+                        continue
+                    emit_threadsafe(loop, {
+                        "type": "partial", "lang": lang, "original": original,
+                        "translations": translate_all(lang, original, partial=True)})
+                    continue
+
+                translations = translate_all(lang, original)
+                elapsed = _time.time() - t0
+                print(f"[{lang}] ({elapsed:.1f}s) {original}  =>  "
+                      + "  |  ".join(t["text"] for t in translations))
+                emit_threadsafe(loop, {
+                    "type": "final", "lang": lang,
+                    "original": original, "translations": translations,
+                })
+                utt_langs.pop(utt_id, None)
+            except Exception:
+                traceback.print_exc()
+                continue
 
     def segmenter():
         import collections
@@ -354,41 +383,87 @@ def start_pipeline(loop, source_file=None):
         vad = VADIterator(
             vad_model, threshold=vad_cfg["threshold"], sampling_rate=sr,
             min_silence_duration_ms=vad_cfg["min_silence_ms"], speech_pad_ms=0)
+        # Second, independent silero instance JUST for per-chunk probability.
+        # VADIterator's vad_model is recurrent/stateful and advances its own state
+        # each chunk; calling that same object again here would double-advance it
+        # and break detection. A dedicated model scores without disturbing VAD. We
+        # never reset its states — continuous running avoids per-utterance cold-start.
+        score_vad = load_silero_vad()
         preroll = collections.deque(
             maxlen=max(1, int(vad_cfg["preroll_ms"] / 1000 * sr / chunk_size)))
         buf, speaking, start_t, last_partial = [], False, 0.0, 0.0
+        # Pre-ASR speech gate counters over the SPOKEN region (preroll excluded):
+        # fraction of voiced frames separates real speech from music/applause that
+        # VADIterator otherwise brackets into an "utterance" Whisper hallucinates on.
+        voiced, total = 0, 0
+        min_speech_ratio = vad_cfg.get("min_speech_ratio", 0.40)
+        min_speech_s = vad_cfg.get("min_speech_s", 0.5)
+        energy_floor = vad_cfg.get("energy_floor", 0.0)
+
+        def is_speech_segment():
+            if total == 0:
+                return False
+            if total * chunk_size / sr < min_speech_s:      # too short to be a real line
+                return False
+            return voiced / total >= min_speech_ratio        # enough voiced frames (rejects music/applause)
 
         while True:
             with chunk_lock:
                 while not chunk_queue:
                     chunk_lock.wait()
                 chunk = chunk_queue.pop(0)
-            event = vad(torch.from_numpy(chunk))
+            # mic_reader keeps filling chunk_queue regardless, so losing this
+            # thread is worse than losing asr_worker — isolate per-chunk failures
+            # and reset running state so a mid-utterance error doesn't wedge VAD.
+            try:
+                t = torch.from_numpy(chunk)
+                event = vad(t)
+                prob = score_vad(t, sr).item()  # same tensor; score_vad is the separate instance
 
-            if speaking:
-                buf.append(chunk)
-            if event and "start" in event:
-                speaking = True
-                utt_counter["n"] += 1
-                buf = list(preroll) + [chunk]
-                start_t = last_partial = _time.time()
-            elif event and "end" in event:
-                speaking = False
-                submit("final", np.concatenate(buf), utt_counter["n"])
-                buf = []
-            elif speaking:
-                now = _time.time()
-                if now - start_t > vad_cfg["max_utterance_s"]:
-                    submit("final", np.concatenate(buf), utt_counter["n"])
+                if speaking:
+                    buf.append(chunk)
+                    total += 1
+                    voiced += 1 if prob >= vad_cfg["threshold"] else 0
+                if event and "start" in event:
+                    speaking = True
                     utt_counter["n"] += 1
-                    buf, start_t, last_partial = [], now, now
-                elif (vad_cfg["partial_interval_s"] > 0
-                      and now - last_partial > vad_cfg["partial_interval_s"]
-                      and len(buf) * chunk_size > sr):
-                    submit("partial", np.concatenate(buf), utt_counter["n"])
-                    last_partial = now
-            if not speaking:
-                preroll.append(chunk)
+                    buf = list(preroll) + [chunk]
+                    start_t = last_partial = _time.time()
+                    # Count only the start chunk; preroll is pre-speech.
+                    total = 1
+                    voiced = 1 if prob >= vad_cfg["threshold"] else 0
+                elif event and "end" in event:
+                    speaking = False
+                    # Gate is finals-only and fails safe by dropping: a non-speech
+                    # segment submits nothing, so the last good caption stays up.
+                    audio = np.concatenate(buf)
+                    if is_speech_segment() and (
+                            energy_floor <= 0
+                            or np.sqrt(np.mean(audio ** 2)) >= energy_floor):
+                        submit("final", audio, utt_counter["n"])
+                    buf = []
+                elif speaking:
+                    now = _time.time()
+                    if now - start_t > vad_cfg["max_utterance_s"]:
+                        audio = np.concatenate(buf)
+                        if is_speech_segment() and (
+                                energy_floor <= 0
+                                or np.sqrt(np.mean(audio ** 2)) >= energy_floor):
+                            submit("final", audio, utt_counter["n"])
+                        utt_counter["n"] += 1
+                        buf, start_t, last_partial = [], now, now
+                        voiced = total = 0  # next sub-segment counts fresh
+                    elif (vad_cfg["partial_interval_s"] > 0
+                          and now - last_partial > vad_cfg["partial_interval_s"]
+                          and len(buf) * chunk_size > sr):
+                        # Partials are throwaway — never gated.
+                        submit("partial", np.concatenate(buf), utt_counter["n"])
+                        last_partial = now
+                if not speaking:
+                    preroll.append(chunk)
+            except Exception:
+                traceback.print_exc()
+                speaking, buf, voiced, total = False, [], 0, 0
 
     threading.Thread(target=asr_worker, daemon=True).start()
     threading.Thread(target=segmenter, daemon=True).start()
