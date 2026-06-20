@@ -21,6 +21,8 @@
     "beam_size_final": 5,
     "temperature": 0,
     "cuda_compute_type": "int8_float16",
+    "drop_no_speech_prob": 0.85,
+    "drop_avg_logprob": -2.2,
     "initial_prompt": "Wedding speeches and toasts for the bride Ellese Ha and groom Reynold To. Other names: Vinh Ha, Vinh To, Sue La, Amy Ha, Ricky Ha, Brian He, Wilson Ngo, Shafif Aurik, Julian Widjaja, Jeehun Kim, Austin Lei, Leyen Nguyen, Jazz Oey. Venue: Villa Plenilunio."
   },
   "languages": {
@@ -60,7 +62,10 @@
       "wedding speeches and toasts"
     ],
     "max_compression_ratio": 3.0,
-    "min_gate_len": 24
+    "min_gate_len": 24,
+    "standalone_blocklist": [
+      "you", "you.", "okay", "okay.", "ok", "ok.", "bye", "bye."
+    ]
   },
   "server": {
     "host": "0.0.0.0",

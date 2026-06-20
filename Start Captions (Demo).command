@@ -14,5 +14,5 @@ echo "Starting demo (scripted captions, no mic/models)..."
 echo "Press Ctrl+C to stop."
 echo
 
-( sleep 2; open "http://localhost:8765/" ) &
+( sleep 2; open "http://localhost:8765/display" ) &
 "$PY" -u server.py --demo

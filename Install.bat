@@ -60,9 +60,15 @@ echo If your connection drops it resumes automatically - just wait.
 python setup_models.py
 if errorlevel 1 ( echo. & echo Model download did not finish - re-run Install.bat to resume. & pause & exit /b 1 )
 
+rem ---- 6. Desktop shortcut (best-effort; don't fail the install if it errors) ----
+powershell -NoProfile -Command "$ws=New-Object -ComObject WScript.Shell; $l=$ws.CreateShortcut([Environment]::GetFolderPath('Desktop')+'\Wedding Captions.lnk'); $l.TargetPath='%~dp0Start Captions.bat'; $l.WorkingDirectory='%~dp0'; $l.Save()" 2>nul
+
 echo.
 echo ============================================================
-echo   All done!  Double-click  "Start Captions.bat"  to run it.
+echo   All done!  Double-click the "Wedding Captions" shortcut on
+echo   your Desktop ^(or "Start Captions.bat" in this folder^) - it
+echo   opens a control page in your browser where you pick your
+echo   model + microphone and click Start.
 echo   ^(or "Start Captions (Demo).bat" to preview the display^)
 echo ============================================================
 pause

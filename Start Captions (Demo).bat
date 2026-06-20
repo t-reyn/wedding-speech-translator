@@ -9,7 +9,7 @@ if not exist "%PY%" set "PY=python"
 
 echo Starting Wedding Speech Translator demo (scripted captions, no mic/models needed)...
 echo.
-start "" http://localhost:8765/
+start "" http://localhost:8765/display
 "%PY%" -u server.py --demo
 echo.
 echo Server stopped.

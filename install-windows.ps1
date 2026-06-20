@@ -57,9 +57,22 @@ Write-Host ""
 Write-Host "Downloading models (~4 GB, one-time). Resumes automatically if it stalls."
 & $py setup_models.py
 
+# Drop a Desktop shortcut so they don't have to dig into the folder.
+try {
+  $ws = New-Object -ComObject WScript.Shell
+  $lnk = $ws.CreateShortcut("$HOME\Desktop\Wedding Captions.lnk")
+  $lnk.TargetPath = "$dest\Start Captions.bat"
+  $lnk.WorkingDirectory = $dest
+  $lnk.Description = "Wedding Speech Translator"
+  $lnk.Save()
+} catch {
+  Write-Host "(Couldn't create the Desktop shortcut - you can still run Start Captions.bat from the folder.)"
+}
+
 explorer $dest
 Write-Host ""
 Write-Host "============================================================"
-Write-Host "  All done!  In the window that just opened, double-click"
-Write-Host "  Start Captions.bat  to run it."
+Write-Host "  All done!  Double-click the 'Wedding Captions' shortcut on"
+Write-Host "  your Desktop - it opens a control page in your browser where"
+Write-Host "  you pick your model + microphone and click Start."
 Write-Host "============================================================"

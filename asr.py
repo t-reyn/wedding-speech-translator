@@ -5,6 +5,8 @@ Whisper's built-in translate task is deliberately not used: large-v3-turbo was t
 without it, so translation happens in a separate NLLB stage (see translate.py).
 """
 
+import gc
+
 import numpy as np
 
 from gpu import enable_cuda_dlls
@@ -23,6 +25,8 @@ class MlxWhisperASR:
         # temperatures — fine offline, but on a live feed (applause, laughter,
         # cross-talk between speeches) those retries are multi-second lag spikes.
         self.temperature = cfg.get("temperature", 0)
+        self.drop_no_speech = cfg.get("drop_no_speech_prob", 0.85)
+        self.drop_avg_logprob = cfg.get("drop_avg_logprob", -1.3)
         self.mlx_whisper.transcribe(np.zeros(16000, dtype=np.float32),
                                     path_or_hf_repo=self.model)
 
@@ -32,8 +36,15 @@ class MlxWhisperASR:
             language=language, initial_prompt=initial_prompt,
             temperature=self.temperature,
             condition_on_previous_text=False, fp16=True)
+        # OR not AND: a confident non-speech hallucination (low no_speech_prob,
+        # high avg_logprob — "Airplane music…" over music) clears the coupled
+        # clause, so each independent clause must be able to drop on its own.
+        def _drop(nsp, alp):
+            return (nsp > self.drop_no_speech
+                    or alp < self.drop_avg_logprob
+                    or (nsp > 0.6 and alp < -1.0))
         segments = [s for s in result["segments"]
-                    if not (s["no_speech_prob"] > 0.6 and s["avg_logprob"] < -1.0)]
+                    if not _drop(s.get("no_speech_prob", 0.0), s.get("avg_logprob", 0.0))]
         text = " ".join(s["text"].strip() for s in segments)
         return text.strip(), result.get("language")
 
@@ -43,6 +54,8 @@ class FasterWhisperASR:
         from faster_whisper import WhisperModel
         self.beam_final = cfg["beam_size_final"]
         self.temperature = cfg.get("temperature", 0)
+        self.drop_no_speech = cfg.get("drop_no_speech_prob", 0.85)
+        self.drop_avg_logprob = cfg.get("drop_avg_logprob", -1.3)
         self.model = None
         cuda_compute = cfg.get("cuda_compute_type", "int8_float16")
         if cfg.get("device", "auto") in ("auto", "cuda"):
@@ -56,8 +69,22 @@ class FasterWhisperASR:
                 print("Whisper: using CUDA (GPU).")
             except Exception as e:
                 print(f"Whisper: CUDA unavailable ({type(e).__name__}); falling back to CPU.")
+                # Release the failed CUDA model or its GPU memory stays pinned and the retry re-fails.
+                try:
+                    del model
+                except NameError:
+                    pass
+                gc.collect()
+                try:
+                    import torch
+                    torch.cuda.empty_cache()
+                except Exception:
+                    pass
         if self.model is None:
-            self.model = WhisperModel(cfg["fw_model"], device="cpu", compute_type="int8")
+            try:
+                self.model = WhisperModel(cfg["fw_model"], device="cpu", compute_type="int8")
+            except Exception as e:
+                raise RuntimeError(f"Failed to load Whisper model on CPU: {e}")
             print("Whisper: using CPU (int8).")
 
     def transcribe(self, audio, language=None, initial_prompt=None, final=True):
@@ -66,8 +93,15 @@ class FasterWhisperASR:
             beam_size=self.beam_final if final else 1,
             temperature=self.temperature,
             condition_on_previous_text=False, vad_filter=False)
+        # OR not AND: a confident non-speech hallucination (low no_speech_prob,
+        # high avg_logprob — "Airplane music…" over music) clears the coupled
+        # clause, so each independent clause must be able to drop on its own.
+        def _drop(nsp, alp):
+            return (nsp > self.drop_no_speech
+                    or alp < self.drop_avg_logprob
+                    or (nsp > 0.6 and alp < -1.0))
         segments = [s for s in segments
-                    if not (s.no_speech_prob > 0.6 and s.avg_logprob < -1.0)]
+                    if not _drop(getattr(s, "no_speech_prob", 0.0), getattr(s, "avg_logprob", 0.0))]
         text = " ".join(s.text.strip() for s in segments)
         return text.strip(), info.language
 

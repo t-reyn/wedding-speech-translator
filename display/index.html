@@ -157,7 +157,7 @@
     $('partial').textContent = nfc(msg.original) || '';
     // Partials now carry live translations (unless a final was already queued).
     // Render them provisionally; if none, leave the previous final on screen.
-    if (msg.translations && msg.translations.length) renderStack(msg, false);
+    if (msg.translations && msg.translations.length && !looksLikeGarbage(msg)) renderStack(msg, false);
   }
 
   // Last-line garbage guard: a single VAD segment is capped at ~8s, so a real

@@ -45,13 +45,14 @@ echo
 echo "Downloading models (~4 GB, one-time). Resumes automatically if it stalls."
 python setup_models.py
 
-# Friendly shortcut + open the folder so they can double-click Start Captions.
-ln -sfn "$DEST" "$HOME/Desktop/Wedding Captions" 2>/dev/null || true
+# Friendly shortcut (points straight at the launcher) + open the folder.
+ln -sfn "$DEST/Start Captions.command" "$HOME/Desktop/Wedding Captions.command" 2>/dev/null || true
 open "$DEST" 2>/dev/null || true
 
 echo
 echo "============================================================"
 echo "  All done!"
-echo "  Double-click  Start Captions.command  in the window that"
-echo "  just opened (or the 'Wedding Captions' shortcut on your Desktop)."
+echo "  Double-click 'Wedding Captions' on your Desktop (a control"
+echo "  page opens in your browser — pick your model + mic and click"
+echo "  Start)."
 echo "============================================================"

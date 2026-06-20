@@ -1,0 +1,296 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:,">
+<title>Wedding Captions — Control</title>
+<style>
+  /* Self-hosted so the panel works offline (no Google Fonts CDN). */
+  @font-face{font-family:'Archivo';font-style:normal;font-weight:400;font-display:swap;
+    src:url('/fonts/archivo-400.ttf') format('truetype');}
+  @font-face{font-family:'Archivo';font-style:normal;font-weight:500;font-display:swap;
+    src:url('/fonts/archivo-500.ttf') format('truetype');}
+  @font-face{font-family:'Archivo';font-style:normal;font-weight:600;font-display:swap;
+    src:url('/fonts/archivo-600.ttf') format('truetype');}
+  @font-face{font-family:'IBM Plex Mono';font-style:normal;font-weight:400;font-display:swap;
+    src:url('/fonts/plexmono-400.ttf') format('truetype');}
+  @font-face{font-family:'IBM Plex Mono';font-style:normal;font-weight:500;font-display:swap;
+    src:url('/fonts/plexmono-500.ttf') format('truetype');}
+
+  :root{
+    --bg:#0e110f; --ink:#eef3ee; --ink-dim:#aeb6ad; --source:#6a746c;
+    --green:#8ed6ab; --gold:#e3c489; --cream:#f4f5ef; --red:#e39b8c;
+    --card:#161a17; --line:#262b27; --field:#11140f;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  html,body{min-height:100%;background:var(--bg);}
+  body{font-family:'Archivo',system-ui,sans-serif;color:var(--ink);
+    -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;
+    display:flex;align-items:center;justify-content:center;
+    min-height:100vh;padding:32px 20px;}
+
+  .card{width:100%;max-width:520px;background:var(--card);
+    border:1px solid var(--line);border-radius:18px;
+    padding:clamp(26px,4vw,40px);box-shadow:0 24px 60px rgba(0,0,0,.45);}
+
+  .head{display:flex;align-items:center;gap:13px;margin-bottom:6px;}
+  .mic{flex:0 0 auto;color:var(--green);}
+  h1{font-size:clamp(22px,3vw,28px);font-weight:600;letter-spacing:-.01em;color:var(--cream);}
+  .sub{font-family:'IBM Plex Mono',monospace;font-size:13px;letter-spacing:.04em;
+    color:var(--source);margin-bottom:26px;}
+
+  /* status pill — colour + label are set per state in render() */
+  .status{display:flex;align-items:center;gap:10px;padding:13px 16px;
+    border:1px solid var(--line);border-radius:11px;background:var(--field);
+    margin-bottom:24px;}
+  .dot{width:11px;height:11px;border-radius:50%;flex:0 0 auto;background:var(--source);}
+  .status.running .dot{background:var(--green);}
+  .status.loading .dot{background:var(--gold);animation:pulse 1.1s ease-in-out infinite;}
+  .status.error   .dot{background:var(--red);}
+  .status.idle    .dot{background:var(--source);}
+  @keyframes pulse{0%,100%{opacity:1;}50%{opacity:.3;}}
+  .status .label{font-family:'IBM Plex Mono',monospace;font-size:14px;
+    font-weight:500;letter-spacing:.03em;}
+  .status.running .label{color:var(--green);}
+  .status.loading .label{color:var(--gold);}
+  .status.error   .label{color:var(--red);}
+  .status.idle    .label{color:var(--ink-dim);}
+
+  /* error text + last-caption confirmation live under the status pill */
+  .note{font-size:13px;line-height:1.45;margin:-14px 0 24px;padding:0 2px;}
+  .note.err{color:var(--red);font-family:'IBM Plex Mono',monospace;
+    white-space:pre-wrap;word-break:break-word;}
+  .note.heard{color:var(--source);font-style:italic;}
+  .note.heard b{font-style:normal;font-weight:500;font-family:'IBM Plex Mono',monospace;
+    color:var(--source);letter-spacing:.1em;text-transform:uppercase;font-size:11px;
+    display:block;margin-bottom:3px;}
+  .hidden{display:none;}
+
+  .field{margin-bottom:18px;}
+  .field label{display:block;font-family:'IBM Plex Mono',monospace;font-size:12px;
+    letter-spacing:.18em;text-transform:uppercase;color:var(--source);
+    font-weight:500;margin-bottom:8px;}
+  select{width:100%;appearance:none;font-family:'Archivo',sans-serif;font-size:16px;
+    color:var(--ink);background:var(--field);border:1px solid var(--line);
+    border-radius:10px;padding:13px 42px 13px 14px;cursor:pointer;
+    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 14 14'><path d='M3 5l4 4 4-4' fill='none' stroke='%238ed6ab' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+    background-repeat:no-repeat;background-position:right 14px center;}
+  select:focus{outline:none;border-color:var(--green);}
+  select:disabled{opacity:.55;cursor:not-allowed;}
+
+  .btns{margin-top:26px;display:flex;flex-direction:column;gap:11px;}
+  button{font-family:'Archivo',sans-serif;border:1px solid transparent;
+    border-radius:11px;cursor:pointer;transition:opacity .15s ease,background .15s ease;}
+  button:disabled{opacity:.45;cursor:not-allowed;}
+  .btn-primary{font-size:18px;font-weight:600;letter-spacing:-.005em;
+    padding:16px 18px;background:var(--green);color:#0c1410;}
+  .btn-primary:not(:disabled):hover{background:#a3e0bc;}
+  .btn-secondary{font-size:15px;font-weight:500;padding:13px 16px;
+    background:transparent;border-color:var(--line);color:var(--ink-dim);}
+  .btn-secondary:not(:disabled):hover{border-color:var(--source);color:var(--ink);}
+  .btn-stop{color:var(--red);border-color:rgba(227,155,140,.4);}
+  .btn-stop:not(:disabled):hover{border-color:var(--red);background:rgba(227,155,140,.08);}
+
+  .footer{margin-top:22px;padding-top:20px;border-top:1px solid var(--line);}
+  .hint{font-size:12.5px;line-height:1.5;color:var(--source);margin-top:9px;}
+  .reconnect{font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.06em;
+    color:var(--gold);opacity:.85;margin-top:14px;text-align:center;}
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="head">
+      <svg class="mic" width="26" height="26" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <rect x="9" y="2" width="6" height="11" rx="3" stroke="currentColor" stroke-width="1.7"/>
+        <path d="M5 11a7 7 0 0 0 14 0M12 18v3M8.5 21h7" stroke="currentColor"
+          stroke-width="1.7" stroke-linecap="round"/>
+      </svg>
+      <h1>Wedding Captions</h1>
+    </div>
+    <div class="sub">Operator control panel</div>
+
+    <div class="status idle" id="status">
+      <span class="dot"></span>
+      <span class="label" id="statusLabel">○ Loading…</span>
+    </div>
+    <div class="note err hidden" id="errNote"></div>
+    <div class="note heard hidden" id="heardNote"><b>Last heard</b><span id="heardText"></span></div>
+
+    <div class="field">
+      <label for="model">Whisper model</label>
+      <select id="model"><option>Loading…</option></select>
+    </div>
+    <div class="field">
+      <label for="device">Microphone</label>
+      <select id="device"><option>Loading…</option></select>
+    </div>
+
+    <div class="btns">
+      <button class="btn-primary" id="startBtn" disabled>Start captions</button>
+      <button class="btn-secondary btn-stop hidden" id="stopBtn">Stop</button>
+    </div>
+
+    <div class="footer">
+      <button class="btn-secondary" id="projBtn" style="width:100%">⤢ Open projector view</button>
+      <div class="hint">Opens the caption screen — drag it to the projector and press F for fullscreen.</div>
+    </div>
+    <div class="reconnect hidden" id="reconnect">reconnecting…</div>
+  </div>
+
+<script>
+  const $ = id => document.getElementById(id);
+  const LANG_NAMES = { en:'English', yue:'Cantonese', zh:'Cantonese', vi:'Vietnamese' };
+
+  // Server is the source of truth: we poll /api/state and render() from it.
+  // optimisticState lets the button reflect "loading" the instant Start is
+  // clicked, before the next poll lands; cleared once a real poll arrives.
+  let optimisticState = null;
+  let optionsReady = false;
+
+  function deviceValue() {
+    const v = $('device').value;
+    return v === '' ? null : parseInt(v, 10);
+  }
+
+  async function loadOptions() {
+    const r = await fetch('/api/options');
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const data = await r.json();
+
+    const model = $('model');
+    model.innerHTML = '';
+    let preferred = null;
+    for (const m of data.models || []) {
+      const opt = document.createElement('option');
+      opt.value = m.key;
+      opt.textContent = m.label;
+      if (m.available === false) opt.disabled = true;
+      else if (m.key === 'turbo' && preferred === null) preferred = m.key;
+      model.append(opt);
+    }
+    if (preferred) model.value = preferred;
+
+    const device = $('device');
+    device.innerHTML = '';
+    const sys = document.createElement('option');
+    sys.value = ''; sys.textContent = 'System default';
+    device.append(sys);
+    for (const d of data.devices || []) {
+      const opt = document.createElement('option');
+      opt.value = String(d.index);
+      opt.textContent = d.name;
+      device.append(opt);
+    }
+    if (data.default_device !== null && data.default_device !== undefined) {
+      device.value = String(data.default_device);
+    }
+
+    optionsReady = true;
+  }
+
+  function render(state) {
+    const status = $('status');
+    const label = $('statusLabel');
+    const startBtn = $('startBtn');
+    const stopBtn = $('stopBtn');
+    const errNote = $('errNote');
+    const heardNote = $('heardNote');
+
+    const s = optimisticState || state.state || 'idle';
+    status.className = 'status ' + s;
+    errNote.classList.add('hidden');
+    heardNote.classList.add('hidden');
+    stopBtn.classList.add('hidden');
+
+    if (s === 'running') {
+      const lang = state.detected_lang && LANG_NAMES[state.detected_lang];
+      label.textContent = '● Listening' + (lang ? ' · ' + lang : '');
+      startBtn.textContent = 'Restart with these settings';
+      startBtn.disabled = !optionsReady;
+      stopBtn.classList.remove('hidden');
+      // last caption is a live confirmation that the mic is being heard
+      if (state.last_caption && state.last_caption.original) {
+        $('heardText').textContent = state.last_caption.original;
+        heardNote.classList.remove('hidden');
+      }
+    } else if (s === 'loading') {
+      label.textContent = '● Loading model…';
+      startBtn.textContent = 'Start captions';
+      startBtn.disabled = true;
+    } else if (s === 'error') {
+      label.textContent = '● Error';
+      startBtn.textContent = 'Start captions';
+      startBtn.disabled = !optionsReady;
+      errNote.textContent = state.error || 'Something went wrong. Try starting again.';
+      errNote.classList.remove('hidden');
+    } else {
+      label.textContent = '○ Not started';
+      startBtn.textContent = 'Start captions';
+      startBtn.disabled = !optionsReady;
+    }
+  }
+
+  async function start() {
+    $('startBtn').disabled = true;
+    optimisticState = 'loading';
+    render({ state: 'loading' });
+    try {
+      await fetch('/api/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: $('model').value, device: deviceValue() }),
+      });
+    } catch (e) {
+      optimisticState = null;   // let the next poll surface any error
+    }
+  }
+
+  async function stop() {
+    $('stopBtn').disabled = true;
+    try {
+      await fetch('/api/stop', { method: 'POST' });
+    } finally {
+      $('stopBtn').disabled = false;
+      optimisticState = null;
+    }
+  }
+
+  let pollFailed = false;
+  async function poll() {
+    try {
+      const r = await fetch('/api/state');
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      const state = await r.json();
+      if (pollFailed) { pollFailed = false; $('reconnect').classList.add('hidden'); }
+      // A real state has landed — clear the optimistic override so the server wins.
+      if (state.state) optimisticState = null;
+      render(state);
+    } catch (e) {
+      // Server may be momentarily down (e.g. restarting after Start). Keep
+      // polling; don't crash the page or wipe the current UI.
+      pollFailed = true;
+      $('reconnect').classList.remove('hidden');
+    }
+  }
+
+  $('startBtn').addEventListener('click', start);
+  $('stopBtn').addEventListener('click', stop);
+  $('projBtn').addEventListener('click', () => window.open('/display', '_blank'));
+
+  (async function init() {
+    try {
+      await loadOptions();
+    } catch (e) {
+      // Options failed on first load: surface it, keep retrying in the background.
+      render({ state: 'error', error: 'Could not load models and microphones — is the server ready? Retrying…' });
+      const retry = setInterval(async () => {
+        try { await loadOptions(); clearInterval(retry); } catch (_) {}
+      }, 1500);
+    }
+    poll();
+    setInterval(poll, 1000);
+  })();
+</script>
+</body>
+</html>

@@ -54,9 +54,11 @@ It downloads and sets everything up, then opens the app folder. If a "developer
 tools" popup appears, click **Install**, wait for it to finish, then paste the
 same line again — that only happens once.
 
-When it's done, double-click **`Start Captions.command`** in the folder it
-opened (or the **Wedding Captions** shortcut it put on your Desktop). Click
-**OK** to allow the microphone, and the caption screen opens in your browser.
+When it's done, double-click the **Wedding Captions** shortcut it put on your
+Desktop (or **`Start Captions.command`** in the folder it opened). A **control
+page** opens in your browser — pick your Whisper model and microphone there and
+click **Start** (no more terminal menu). Click **OK** to allow the microphone
+when macOS asks.
 
 ### Windows
 
@@ -68,8 +70,11 @@ irm https://raw.githubusercontent.com/t-reyn/wedding-speech-translator/main/inst
 ```
 
 If it needs to install Git or Python, it'll ask you to close PowerShell, open a
-new one, and paste the line again. When it finishes it opens the app folder —
-double-click **`Start Captions.bat`** to run it. (On a PC with an NVIDIA graphics
+new one, and paste the line again. When it finishes it puts a **Wedding
+Captions** shortcut on your Desktop and opens the app folder — double-click the
+shortcut (or **`Start Captions.bat`** in the folder) to run it. A **control
+page** opens in your browser where you pick your Whisper model and microphone
+and click **Start** (no more terminal menu). (On a PC with an NVIDIA graphics
 card it automatically runs 3–4× faster.)
 
 <details><summary>Don't want to type a command? Use GitHub Desktop instead.</summary>
@@ -90,19 +95,27 @@ is blocked the first time, right-click the file → **Open** → **Open**.
 python server.py --demo               # try the display with scripted captions, no mic
 python server.py --list-devices       # find your USB audio interface's device index
 python server.py --file clip.wav      # run a mono 16 kHz WAV through the real pipeline
-python server.py                      # the real thing (live mic)
+python server.py                      # the real thing — opens the browser control panel
+python server.py --model cantonese    # shortcut: auto-start that model, skip the panel
 ```
 
 `--file` streams a recording through the exact VAD → Whisper → NLLB → display
 path the live mic uses — handy for testing on a machine without a mic, or for
 rehearsing with recorded speeches. The WAV must be mono, 16 kHz.
 
-Open http://localhost:8765/ in a browser on the projector screen (the launchers
-open it for you). The display shows the **spoken** language as a large headline
-with live translations beneath it, colour-coded per language; it re-orders
-automatically when the speaker switches between English and Cantonese.
-**Hotkeys on the display:** `F` fullscreen · `H` hide captions (panic button).
-Double-click also enters fullscreen.
+`python server.py` opens a **control panel** at http://localhost:8765/ (the
+launchers open it for you). Pick your Whisper model and microphone there and
+click **Start** — no terminal menu. Passing `--model X` still works as a
+shortcut that auto-starts that model without the panel; otherwise choose it in
+the browser.
+
+The **projector caption screen** is at http://localhost:8765/display — the
+control panel has an **Open projector view** button, so put that on the big
+screen. The display shows the **spoken** language as a large headline with live
+translations beneath it, colour-coded per language; it re-orders automatically
+when the speaker switches between English and Cantonese.
+**Hotkeys on the `/display` page:** `F` fullscreen · `H` hide captions (panic
+button). Double-click also enters fullscreen.
 
 Set `audio.device` in `config.json` to the device index from `--list-devices`
 (leave `null` for system default input).
@@ -149,10 +162,11 @@ wifi, then it's selectable like any other model:
 
 1. **Convert** (downloads ~1.6 GB, one-time): double-click **`Convert Cantonese`**
    (`.command` on Mac, `.bat` on Windows), or run `python convert_cantonese.py`.
-2. **Use it:** on Mac, `Start Captions` now offers a **`6) cantonese`** choice; on
-   Windows (or any terminal), `python server.py --model cantonese`.
-3. **Switch back** anytime by picking `turbo` — nothing is overwritten, so you can
-   A/B the two with real speakers in rehearsal.
+2. **Use it:** pick **cantonese** from the model dropdown in the browser control
+   panel and click Start (or run `python server.py --model cantonese` to skip the
+   panel).
+3. **Switch back** anytime by picking `turbo` in the dropdown — nothing is
+   overwritten, so you can A/B the two with real speakers in rehearsal.
 
 To try a *different* Cantonese fine-tune, point the converter at it:
 `python convert_cantonese.py --model <hf-repo-id>`. Any Whisper-format model on

@@ -48,9 +48,15 @@ if ! python setup_models.py; then
   read -r -p "Press Return."; exit 1
 fi
 
+# Friendly Desktop shortcut straight to the launcher (best-effort).
+ln -sfn "$(pwd)/Start Captions.command" "$HOME/Desktop/Wedding Captions.command" 2>/dev/null || true
+
 echo
 echo "============================================================"
-echo "  All done!  Double-click  \"Start Captions.command\"  to run."
+echo "  All done!  Double-click 'Wedding Captions' on your Desktop"
+echo "  (or \"Start Captions.command\" in this folder) - it opens a"
+echo "  control page in your browser where you pick your model + mic"
+echo "  and click Start."
 echo "  (or \"Start Captions (Demo).command\" to preview the display)"
 echo "============================================================"
 read -r -p "Press Return to close."
