@@ -202,6 +202,31 @@ def collapse_repeats(text):
     return text.strip()
 
 
+def is_hallucinated(text, max_ratio=3.0, min_gate_len=24):
+    """Confident, repetitive hallucinations (looped phrases, name-salad on
+    music/applause) compress far more than real speech, yet decode as
+    high-confidence so the no_speech/logprob segment filter misses them.
+    Bytes/compressed-bytes is script-uniform, so CJK loops score as high as
+    English ones; genuine captions sit well under max_ratio. Module-level so it
+    is unit-testable without loading models (see test_gates.py)."""
+    b = text.encode("utf-8")
+    if len(b) < min_gate_len:
+        return False
+    return len(b) / max(1, len(zlib.compress(b))) > max_ratio
+
+
+def _friendly_load_error(exc, model_key):
+    """Turn a model-load failure into operator-actionable text for the panel.
+    Out-of-memory (a small GPU + a big model, or other apps hogging RAM) is the
+    common one on a constrained machine — say what to actually do about it."""
+    msg = str(exc)
+    if any(s in msg.lower()
+           for s in ("out of memory", "mkl_malloc", "alloc", "cuda", "cublas", "cudnn")):
+        return (f"Out of memory loading the '{model_key}' model. Close other apps, "
+                f"or pick a smaller model (e.g. 'small'), then press Start again. [{msg}]")
+    return msg
+
+
 DEMO_SCRIPT = [
     ("en", "Good evening everyone, and a very warm welcome.", [
         ("yue", "各位晚上好，熱烈歡迎大家。"),
@@ -287,19 +312,9 @@ def build_pipeline_threads(loop, controller, stop_event, gen, asr, translator, v
         # are just a guest's name listed in the prompt.
         return any(b in t for b in blocklist)
 
+    # Thresholds for the module-level is_hallucinated() (hoisted for testability).
     max_ratio = CONFIG["filter"].get("max_compression_ratio", 3.0)
     min_gate_len = CONFIG["filter"].get("min_gate_len", 24)
-
-    def is_hallucinated(text):
-        """Confident, repetitive hallucinations (looped phrases, name-salad on
-        music/applause) compress far more than real speech, yet decode as
-        high-confidence so the no_speech/logprob segment filter misses them.
-        Bytes/compressed-bytes is script-uniform, so CJK loops score as high as
-        English ones; genuine captions sit well under max_ratio."""
-        b = text.encode("utf-8")
-        if len(b) < min_gate_len:
-            return False
-        return len(b) / max(1, len(zlib.compress(b))) > max_ratio
 
     import collections
     import time as _time
@@ -395,7 +410,7 @@ def build_pipeline_threads(loop, controller, stop_event, gen, asr, translator, v
                 # ("Airplane music"x30) compresses far above max_ratio, but
                 # collapse_repeats would squash it to one copy first and hide the
                 # signal, so the gate has to fire BEFORE collapsing.
-                if is_hallucinated(text):
+                if is_hallucinated(text, max_ratio, min_gate_len):
                     continue
                 raw = text
                 text = collapse_repeats(text)
@@ -620,28 +635,38 @@ def build_pipeline_threads(loop, controller, stop_event, gen, asr, translator, v
         def file_feeder():
             import time as _time
             import wave
-
-            with wave.open(str(source_file), "rb") as wf:
-                if wf.getframerate() != sr or wf.getnchannels() != 1:
-                    sys.exit(f"{source_file} must be mono {sr} Hz WAV "
-                             f"(got {wf.getnchannels()}ch {wf.getframerate()} Hz)")
-                raw = wf.readframes(wf.getnframes())
-            audio = np.frombuffer(raw, dtype=np.int16).astype(np.float32) / 32768.0
-            print(f"Streaming {source_file} ({len(audio) / sr:.1f}s) through the pipeline...")
-            for i in range(0, len(audio), chunk_size):
-                if stop_event.is_set():
-                    return
-                chunk = audio[i:i + chunk_size]
-                if len(chunk) < chunk_size:
-                    chunk = np.pad(chunk, (0, chunk_size - len(chunk)))
-                feed_chunk(chunk)
-                _time.sleep(chunk_size / sr)
-            for _ in range(int(sr / chunk_size)):
-                if stop_event.is_set():
-                    return
-                feed_chunk(np.zeros(chunk_size, dtype=np.float32))
-                _time.sleep(chunk_size / sr)
-            print("File finished. Captions remain on screen; Ctrl+C to exit.")
+            try:
+                with wave.open(str(source_file), "rb") as wf:
+                    if wf.getframerate() != sr or wf.getnchannels() != 1:
+                        raise RuntimeError(
+                            f"{source_file} must be mono {sr} Hz WAV "
+                            f"(got {wf.getnchannels()}ch {wf.getframerate()} Hz)")
+                    raw = wf.readframes(wf.getnframes())
+                audio = np.frombuffer(raw, dtype=np.int16).astype(np.float32) / 32768.0
+                print(f"Streaming {source_file} ({len(audio) / sr:.1f}s) through the pipeline...")
+                for i in range(0, len(audio), chunk_size):
+                    if stop_event.is_set():
+                        return
+                    chunk = audio[i:i + chunk_size]
+                    if len(chunk) < chunk_size:
+                        chunk = np.pad(chunk, (0, chunk_size - len(chunk)))
+                    feed_chunk(chunk)
+                    _time.sleep(chunk_size / sr)
+                for _ in range(int(sr / chunk_size)):
+                    if stop_event.is_set():
+                        return
+                    feed_chunk(np.zeros(chunk_size, dtype=np.float32))
+                    _time.sleep(chunk_size / sr)
+                print("File finished. Captions remain on screen; Ctrl+C to exit.")
+            except Exception as e:
+                # A daemon thread's SystemExit/exception is silently swallowed, which
+                # would strand the controller at state="running" with no captions.
+                # Surface a bad/short WAV (or any feeder error) as an explicit error.
+                traceback.print_exc()
+                with controller._lock:
+                    controller.state = "error"
+                    controller.error = f"File playback failed: {e}"
+                controller._broadcast()
 
         feeder = threading.Thread(target=file_feeder, daemon=True)
         feeder.start()
@@ -929,7 +954,7 @@ class PipelineController:
                 # Don't clobber a newer generation's state with this stale error.
                 if gen == self.generation:
                     self.state = "error"
-                    self.error = str(e)
+                    self.error = _friendly_load_error(e, model_key)
                     self.asr = None
                     do_broadcast = True
                 else:

@@ -11,9 +11,10 @@ workspace is dev-only.
   Thread → asyncio bridging via `loop.call_soon_threadsafe`.
 - `asr.py` — pluggable Whisper backend: `mlx-whisper` on Apple Silicon,
   `faster-whisper` elsewhere, selected at import time (`backend: "auto"`).
-- `translate.py` — NLLB-600M via CTranslate2. **Whisper's translate task is
-  deliberately unused** — large-v3-turbo was trained without it. Don't "simplify"
-  by switching to `task=translate`.
+- `translate.py` — NLLB-200-distilled-1.3B via CTranslate2 (upgraded from 600M for
+  idiom quality; the model is config-driven via `mt.hf_model`). **Whisper's translate
+  task is deliberately unused** — large-v3-turbo was trained without it. Don't
+  "simplify" by switching to `task=translate`.
 - `display/index.html` — the "Beacon" projector page: near-black canvas, the
   **spoken** language shown as a large cream primary block with the other two
   beneath it as accent-coloured translations (EN grey, Cantonese green, VI gold),

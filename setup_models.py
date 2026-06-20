@@ -26,7 +26,7 @@ if hasattr(sys.stdout, "reconfigure"):
 
 ROOT = Path(__file__).parent
 _MT = json.loads((ROOT / "config.json").read_text(encoding="utf-8"))["mt"]
-NLLB_HF = _MT.get("hf_model", "facebook/nllb-200-distilled-600M")
+NLLB_HF = _MT.get("hf_model", "facebook/nllb-200-distilled-1.3B")
 NLLB_DIR = ROOT / _MT["model_dir"]
 
 HF_RESOLVE = "https://huggingface.co/{repo}/resolve/main/{file}"
